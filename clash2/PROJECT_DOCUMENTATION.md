@@ -1,4 +1,4 @@
-# Clash.gg Clone - Project Documentation
+# csmolly.bet - Project Documentation
 
 Diese Dokumentation fasst den aktuellen Stand des Projekts zusammen, damit in einem neuen Chat nahtlos weitergearbeitet werden kann.
 
@@ -19,19 +19,20 @@ Diese Dokumentation fasst den aktuellen Stand des Projekts zusammen, damit in ei
 - `backend/admin.js`: CLI-Tool für Admin-Aufgaben (z.B. Gems vergeben: `node admin.js add-gems Username 1000`).
 
 ## 🎮 Implementierte Spielmodi
-1. **Cases (Solo & Creator):** Eigene Cases können erstellt werden. Items haben Bilder und Wahrscheinlichkeiten. "Mythic Spin" Modus (hebt Items >150% Profit hervor).
-2. **Case Battles:** Multiplayer via WebSockets. Modi: 1v1, 1v1v1, 2v2, 3v3, FFA. "Crazy Mode" (wenigster Loot gewinnt). Voller Bot-Support.
+1. **Cases (Solo & Creator):** Eigene Cases können erstellt werden. Items haben Bilder und Wahrscheinlichkeiten. "Mythic Spin" Modus (hebt Items >150% Profit hervor). Erstellungs-Option für Case Battles wurde in den `/battles` Bereich verschoben.
+2. **Case Battles:** Multiplayer via WebSockets. Modi: 1v1, 1v1v1, 2v2, 3v3, FFA. "Crazy Mode" (wenigster Loot gewinnt). Voller Bot-Support. Case-Battle-Erstellung ist exklusiv hier eingebettet.
 3. **Upgrader:** SVG-Ring-Spinner. Win-Chance wird berechnet (`(Bet * 0.99) / Ziel-Preis`). 99% RTP ist fest einprogrammiert.
-4. **Crash:** Raketen-Animation mit Cashout-Funktion. Sound-Cleanup via React `useEffect` Unmount.
+4. **Crash:** Raketen-Animation mit Cashout-Funktion. 
+   - **Historie:** Anzeige der letzten 9 Multiplikatoren direkt über dem Spielfeld (neuester Wert ganz rechts). Werte unter 2.00x sind rot, Werte ab 2.00x sind grün.
+   - **Ping-Anzeige:** Echtzeit-Latenz-Anzeige basierend auf Round-Trip-Messung zum Backend.
+   - **Sound-Updates:** Klassische Raketen-Beeps wurden durch Bombensounds (`bomb_planted.mp3` & `bomb_exploding.m4a`) ersetzt.
 5. **Double (Roulette):** Rot/Schwarz/Grün-System. History der letzten 100 Spins inkl. Statistik-Anzeige.
 6. **Mines:** Server-seitige Mine-Generierung (damit nicht cheatbar). Basiert auf einem 5x5 Raster.
-7. **Plinko:** 8, 14 oder 16 Reihen. Low/Medium/High Risk. Der Fallweg wird vom Backend (`'R'`/`'L'`) vorgegeben und im Frontend synchron animiert.
-8. **Keep Digging:** Schaufel-Minispiel. Klick-basiertes Aufdecken von Multiplikatoren.
-9. **Chicken Road:** Lane-basiertes Voranschreiten.
-10. **Blackjack (Normal & Live):**
-    - **Normal:** Gegen den Dealer mit asynchronen Animationen.
-    - **Live Multiplayer:** Lobby-basiert via WebSockets. Alle setzen auf das gleiche Board, entscheiden aber individuell (Hit, Stand, Double). Dealer-Bild (`dealer.png`) über den Karten platziert.
-11. **Slots:** Slot-Machine mit Multiplikator-System.
+7. **Plinko (Deaktiviert):** Derzeit im Navigations-Menü deaktiviert.
+8. **Keep Digging (Deaktiviert):** Derzeit im Navigations-Menü deaktiviert.
+9. **Chicken Road (Deaktiviert):** Derzeit im Navigations-Menü deaktiviert.
+10. **Blackjack (Deaktiviert):** Derzeit im Navigations-Menü deaktiviert.
+11. **Slots (Deaktiviert):** Derzeit im Navigations-Menü deaktiviert.
 12. **Kalshi Bets (Deaktiviert):** Vorhersagemärkte basierend auf der Kalshi-API. (Aktuell deaktiviert, um Leistung zu sparen und den Netzwerk-Workload zu minimieren).
 
 ## 💬 Chat-System & Live Game Feed
@@ -39,6 +40,7 @@ Diese Dokumentation fasst den aktuellen Stand des Projekts zusammen, damit in ei
 ### Chat
 - Jedes Zeichen kostet 1 Gem. Fireworks kosten 1000 Gems und lösen eine `canvas-confetti` Animation aus.
 - History wird über `chatEngine.js` verwaltet (letzte 50 Nachrichten).
+- UI bietet kleine Pfeil-Buttons (Collapse-Arrows) am Rand, um den Chat oder den Live-Feed komplett ein-/auszuklappen bzw. zu verstecken.
 
 ### Live Game Feed
 - **Toggle:** Chat-Sidebar hat zwei Tabs: `💬 Chat` und `📊 Live Feed`.
@@ -51,8 +53,10 @@ Diese Dokumentation fasst den aktuellen Stand des Projekts zusammen, damit in ei
   - **Rot** (`#ef4444`): Profit ≤ 0 (Verlust oder Break-even).
 - **History:** Beim Verbinden werden die letzten 50 Ergebnisse aus `global.gameFeedHistory` gesendet.
 
-## 🏆 Challenge
-- **1.000.000 Gems Challenge:** Die erste Person, die 1 Million Gems erreicht, bekommt 1€. Angezeigt auf der Home-Seite.
+## 🎨 Design, Background & Menü-Interaktionen
+- **Hintergrundbild (`background1`):** Das vordefinierte Hintergrundbild (`background1`) wird responsive so gecroppt, dass linker und rechter Rand perfekt passen und kein monotoner Hintergrund angezeigt wird.
+- **Spiele-Dropdown:** Klicks außerhalb des Spiele-Dropdowns schließen dieses automatisch.
+- **Emojis durch Icons ersetzt:** Im Spiele-Dropdown und auf der Startseite wurden die Emojis durch professionelle Icons ersetzt. Die Spiele Plinko, Keep Digging, Chicken Road, Blackjack und Slots sind im Menü ausgeblendet.
 
 ## 🐛 Kürzlich behobene Bugs & Besonderheiten (WICHTIG für künftige Prompts)
 - **Race Conditions / Moneyhacks:** 
@@ -101,6 +105,31 @@ Um die Ladezeiten der Website zu optimieren, den Server-Workload zu verringern u
 
 ### Reaktivierung:
 Um das Feature wieder in Betrieb zu nehmen, müssen lediglich die oben beschriebenen auskommentierten Blöcke in `server.js`, `Sidebar.jsx` und `App.jsx` wieder einkommentiert werden.
+
+## 📦 Withdraw Inventory (Bot Inventory)
+
+- **644 real CS2 skins** across 3 price bands (cheap $0.01–$0.50, mid $0.55–$45.49, high $50–$9,993)
+- Every item is a **real weapon+skin combo** from the official CSGO-API (`bymykel.github.io/CSGO-API`)
+- Each item has its **own unique skin image** (not generic weapon placeholder)
+- Prices are generated based on weapon class + rarity with multipliers (knives/gloves higher, rifles medium, pistols lower)
+- `float_value` column displays the weapon wear float in the withdraw UI
+
+### Seed Scripts
+- `backend/seed_items.js` — 300 mid-range items (original)
+- `backend/seed_cheap.js` — 102 cheap items
+- `backend/seed_high.js` (inline) — 242 high-value items
+- All scripts use the CSGO-API for REAL skin names and images — no fake combos
+- Database auto-overwrite prevention: `database.js` only seeds when `bot_inventory` is empty
+
+### Steam Bot (Simulated Mode)
+- `backend/.env` — Steam credentials are commented out
+- Backend starts in **simulated mode** — no real Steam trade offers
+- Deposits/withdrawals work via mock trade offers in the database
+- To enable real trades, uncomment the Steam credentials in `.env` and handle Steam Guard
+
+### Critical Fixes
+- **Nested transaction crash** (`tradebotService.js:122`): Payout loop had `BEGIN TRANSACTION` inside `db.all` callback — moved to single `db.serialize()` wrapper
+- **Fake skin combos**: Seed scripts originally generated random names that didn't exist in CS2 → replaced all 644 items with real CSGO-API data
 
 ## 🚀 Starten der Umgebung
 Um die Entwicklungsumgebung zu starten, müssen zwei Terminals geöffnet werden:
