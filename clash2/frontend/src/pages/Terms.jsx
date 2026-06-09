@@ -12,15 +12,15 @@ export default function Terms() {
                     1. Terms of Service
                 </h2>
                 <p style={{ color: '#ccc', marginBottom: '12px', lineHeight: '1.6' }}>
-                    Welcome to Bluegem.com. By accessing or using our services, you agree to comply with and be bound by the following Terms of Service.
+                    Welcome to csmolly.bet. By accessing or using our services, you agree to comply with and be bound by the following Terms of Service.
                 </p>
                 <h3 style={{ color: 'var(--accent-gold)', fontSize: '1.1rem', margin: '15px 0 8px' }}>Eligibility</h3>
                 <p style={{ color: '#aaa', marginBottom: '12px', lineHeight: '1.6' }}>
-                    You must be at least 18 years of age (or the age of majority in your jurisdiction) to register an account and play on Bluegem.com. Any account created by an individual under the age of 18 is a violation of these terms and will be terminated immediately.
+                    You must be at least 18 years of age (or the age of majority in your jurisdiction) to register an account and play on csmolly.bet. Any account created by an individual under the age of 18 is a violation of these terms and will be terminated immediately.
                 </p>
                 <h3 style={{ color: 'var(--accent-gold)', fontSize: '1.1rem', margin: '15px 0 8px' }}>Virtual Goods & Gems</h3>
                 <p style={{ color: '#aaa', marginBottom: '12px', lineHeight: '1.6' }}>
-                    Bluegem.com operates utilizing virtual gems. Gems have no real-world monetary value and cannot be redeemed for real currency. Any transactions involving virtual items or skins are subject to trade restrictions, review periods, and admin verification.
+                    csmolly.bet operates utilizing virtual gems. Gems have no real-world monetary value and cannot be redeemed for real currency. Any transactions involving virtual items or skins are subject to trade restrictions, review periods, and admin verification.
                 </p>
                 <h3 style={{ color: 'var(--accent-gold)', fontSize: '1.1rem', margin: '15px 0 8px' }}>Prohibited Conduct</h3>
                 <p style={{ color: '#aaa', marginBottom: '12px', lineHeight: '1.6' }}>

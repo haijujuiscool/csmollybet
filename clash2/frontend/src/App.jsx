@@ -86,57 +86,45 @@ function App() {
         </div>
       </div>
       <div className="feed-sidebar">
-        <div style={{ borderBottom: '2px solid #222', backgroundColor: '#111', padding: '15px 15px 10px 15px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <div style={{ borderBottom: '2px solid #222', backgroundColor: '#111', padding: '15px 15px 10px 15px' }}>
           <div style={{ fontWeight: 'bold', color: 'var(--accent-gold)', textTransform: 'uppercase', letterSpacing: '1.5px', fontSize: '15px' }}>
             Live Game Feed
           </div>
-          <button 
-            onClick={() => setIsFeedCollapsed(true)}
-            style={{
-              background: 'none', border: 'none', color: '#888', cursor: 'pointer', fontSize: '14px', outline: 'none'
-            }}
-            title="Hide Feed"
-          >
-            ▶
-          </button>
         </div>
         <LiveGamesFeed />
       </div>
 
-      {/* Expand handles on screen edges (desktop only via css class) */}
-      {isChatCollapsed && (
-        <div 
-          className="expand-handle"
-          onClick={() => setIsChatCollapsed(false)}
-          style={{
-            position: 'fixed', left: 0, top: '50%', transform: 'translateY(-50%)',
-            width: '20px', height: '60px', backgroundColor: 'var(--bg-panel)',
-            border: '1px solid #333', borderLeft: 'none', borderRadius: '0 8px 8px 0',
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            cursor: 'pointer', zIndex: 1001, color: 'var(--accent-gold)', fontWeight: 'bold'
-          }}
-          title="Show Chat"
-        >
-          ▶
-        </div>
-      )}
+      <div 
+        className="expand-handle"
+        onClick={() => setIsChatCollapsed(!isChatCollapsed)}
+        style={{
+          position: 'fixed', left: 0, top: '50%', transform: `translateY(-50%) translateX(${isChatCollapsed ? 0 : 280}px)`,
+          width: '20px', height: '60px', backgroundColor: 'var(--bg-panel)',
+          border: '1px solid #333', borderLeft: 'none', borderRadius: '0 8px 8px 0',
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          cursor: 'pointer', zIndex: 1001, color: 'var(--accent-gold)', fontWeight: 'bold',
+          transition: 'transform 0.3s cubic-bezier(0.4, 0, 0.2, 1)'
+        }}
+        title={isChatCollapsed ? "Show Chat" : "Hide Chat"}
+      >
+        {isChatCollapsed ? '▶' : '◀'}
+      </div>
 
-      {isFeedCollapsed && (
-        <div 
-          className="expand-handle"
-          onClick={() => setIsFeedCollapsed(false)}
-          style={{
-            position: 'fixed', right: 0, top: '50%', transform: 'translateY(-50%)',
-            width: '20px', height: '60px', backgroundColor: 'var(--bg-panel)',
-            border: '1px solid #333', borderRight: 'none', borderRadius: '8px 0 0 8px',
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            cursor: 'pointer', zIndex: 1001, color: 'var(--accent-gold)', fontWeight: 'bold'
-          }}
-          title="Show Feed"
-        >
-          ◀
-        </div>
-      )}
+      <div 
+        className="expand-handle"
+        onClick={() => setIsFeedCollapsed(!isFeedCollapsed)}
+        style={{
+          position: 'fixed', right: 0, top: '50%', transform: `translateY(-50%) translateX(${isFeedCollapsed ? 0 : -280}px)`,
+          width: '20px', height: '60px', backgroundColor: 'var(--bg-panel)',
+          border: '1px solid #333', borderRight: 'none', borderRadius: '8px 0 0 8px',
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          cursor: 'pointer', zIndex: 1001, color: 'var(--accent-gold)', fontWeight: 'bold',
+          transition: 'transform 0.3s cubic-bezier(0.4, 0, 0.2, 1)'
+        }}
+        title={isFeedCollapsed ? "Show Feed" : "Hide Feed"}
+      >
+        {isFeedCollapsed ? '◀' : '▶'}
+      </div>
     </div>
   );
 }

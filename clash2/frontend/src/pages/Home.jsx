@@ -15,7 +15,7 @@ export default function Home() {
         { name: 'Double', path: '/double', icon: doubleIcon, desc: 'Bet on colors and multiply your gems', color: '#E91E63' },
         { name: 'Crash', path: '/crash', icon: crashIcon, desc: 'Predict the multiplier before it crashes', color: '#4CAF50' },
         { name: 'Mines', path: '/mines', icon: minesIcon, desc: 'Uncover gems, avoid the hidden mines', color: '#FF9800' },
-        { name: 'Battles', path: '/battles', icon: battlesIcon, desc: 'Battle other players or bots in case openings', color: '#FFC107' },
+        { name: 'Battles', path: '/battles', icon: battlesIcon, desc: 'Battle other players or bots in case openings', color: '#FF6B35' },
         { name: 'Cases', path: '/cases', icon: casesIcon, desc: 'Open custom cases and win big skins', color: '#607D8B' },
         { name: 'Upgrader', path: '/upgrader', icon: upgraderIcon, desc: 'Upgrade your items for high tier skins', color: '#FFEB3B' }
     ];
@@ -41,18 +41,18 @@ export default function Home() {
                     left: '-50%',
                     width: '200%',
                     height: '200%',
-                    background: 'radial-gradient(circle, rgba(255, 193, 7, 0.05) 0%, transparent 60%)',
+                    background: 'radial-gradient(circle, rgba(255, 107, 53, 0.05) 0%, transparent 60%)',
                     pointerEvents: 'none'
                 }} />
 
                 <h1 style={{ fontSize: '3.5rem', fontWeight: '900', marginBottom: '15px', letterSpacing: '-1px' }}>
                     Welcome to <span style={{
-                        background: 'linear-gradient(135deg, #1b75ff 0%, #2bd2ff 35%, #ffb800 80%, #ff8c00 100%)',
+                        background: 'linear-gradient(135deg, #FF6B35 0%, #FF8C00 50%, #FFB347 100%)',
                         WebkitBackgroundClip: 'text',
                         WebkitTextFillColor: 'transparent',
                         fontWeight: '950',
-                        textShadow: '0 0 15px rgba(27, 117, 255, 0.3)'
-                    }}>Bluegem.com</span>
+                        textShadow: '0 0 15px rgba(255, 107, 53, 0.3)'
+                    }}>csmolly.bet</span>
                 </h1>
                 <p style={{ color: '#aaa', fontSize: '1.2rem', marginBottom: '35px', maxWidth: '600px', margin: '0 auto 35px' }}>
                     The only CS2 gambling site where the house has a 1% house edge, provably fair and secure! In Clash gg, the house has a 8.5% edge.

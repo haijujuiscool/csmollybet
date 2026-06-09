@@ -460,7 +460,7 @@ export default function Slots() {
                                 ? '#555'
                                 : isFreeSpinMode
                                     ? 'linear-gradient(135deg, #4CAF50, #2E7D32)'
-                                    : 'linear-gradient(135deg, #FFC107, #FF9800)',
+                                    : 'linear-gradient(135deg, #FF6B35, #FF8C00)',
                             color: '#000',
                             border: 'none', borderRadius: '10px',
                             cursor: isSpinning || isAutoSpinning ? 'not-allowed' : 'pointer',

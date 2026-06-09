@@ -73,15 +73,8 @@ export default function Chat({ isCollapsed, onToggleCollapse }) {
         });
     };
 
-    return (
+        return (
         <>
-            {/* Toggle Button */}
-            {!isOpen && (
-                <button className="chat-toggle-btn" onClick={() => setIsOpen(true)}>
-                    💬
-                </button>
-            )}
-
             {/* Chat Sidebar */}
             <div className={`chat-sidebar ${isOpen ? 'open' : ''}`}>
                 {/* Desktop Title Bar */}
@@ -89,16 +82,6 @@ export default function Chat({ isCollapsed, onToggleCollapse }) {
                     <div style={{ fontWeight: 'bold', color: 'var(--accent-gold)', textTransform: 'uppercase', letterSpacing: '1.5px', fontSize: '15px' }}>
                         Live Chat
                     </div>
-                    {onToggleCollapse && (
-                        <button 
-                            className="collapse-arrow-btn"
-                            onClick={onToggleCollapse}
-                            style={{ background: 'none', border: 'none', color: '#888', cursor: 'pointer', fontSize: '14px', outline: 'none' }}
-                            title="Hide Chat"
-                        >
-                            ◀
-                        </button>
-                    )}
                 </div>
 
                 {/* Mobile Title Bar / Tabs */}

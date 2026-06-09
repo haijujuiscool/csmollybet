@@ -33,7 +33,7 @@ export default function AgeVerificationModal() {
         }
 
         if (age < 18) {
-            setError('You must be at least 18 years old to access Bluegem.com.');
+            setError('You must be at least 18 years old to access csmolly.bet.');
             return;
         }
 
@@ -98,7 +98,7 @@ export default function AgeVerificationModal() {
                 </h2>
 
                 <p style={{ color: '#aaa', fontSize: '0.95rem', lineHeight: '1.5', marginBottom: '25px' }}>
-                    To comply with legal requirements and keep Bluegem.com safe, you must verify that you are at least 18 years old and agree to our policies.
+                    To comply with legal requirements and keep csmolly.bet safe, you must verify that you are at least 18 years old and agree to our policies.
                 </p>
 
                 {error && (

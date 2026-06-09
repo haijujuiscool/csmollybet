@@ -11,13 +11,13 @@ export default function Sidebar({ isOpen, onClose }) {
             />
             <nav className={`sidebar ${isOpen ? 'open' : ''}`}>
                 <Link to="/" className="nav-brand" style={{
-                    background: 'linear-gradient(135deg, #1b75ff 0%, #2bd2ff 35%, #ffb800 80%, #ff8c00 100%)',
+                    background: 'linear-gradient(135deg, #FF6B35 0%, #FF8C00 50%, #FFB347 100%)',
                     WebkitBackgroundClip: 'text',
                     WebkitTextFillColor: 'transparent',
                     fontWeight: '950',
                     letterSpacing: '-0.5px'
                 }} onClick={onClose}>
-                    BLUEGEM
+                    CSMOLLY.BET
                 </Link>
 
                 <div className="nav-links">

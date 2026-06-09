@@ -327,7 +327,7 @@ export default function DepositWithdrawModal({ isOpen, onClose, initialTab }) {
                                     fontSize: '13px',
                                     lineHeight: '1.5'
                                 }}>
-                                    <strong style={{ color: '#fff' }}>Trade Offer from BlueGem Tradebot #1</strong><br />
+                                    <strong style={{ color: '#fff' }}>Trade Offer from csmolly.bet Tradebot #1</strong><br />
                                     This is a simulated Steam trade offer. To proceed with the deposit, review the items you are giving, check the confirmation box, and accept the trade.
                                 </div>
 
@@ -492,7 +492,7 @@ export default function DepositWithdrawModal({ isOpen, onClose, initialTab }) {
                                             <div style={{ fontSize: '50px', marginBottom: '15px' }}>📲</div>
                                             <div style={{ color: '#fff', fontSize: '18px', fontWeight: 'bold', marginBottom: '8px' }}>Confirm Trade Offer</div>
                                             <div style={{ color: '#8f98a0', fontSize: '12px', lineHeight: '1.4' }}>
-                                                A trade offer with BlueGem Bot #1 (Offer ID: {activeTradeOffer.id}) is waiting for your confirmation.
+                                                A trade offer with csmolly.bet Bot #1 (Offer ID: {activeTradeOffer.id}) is waiting for your confirmation.
                                             </div>
                                         </div>
 
@@ -681,7 +681,7 @@ export default function DepositWithdrawModal({ isOpen, onClose, initialTab }) {
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
-            zIndex: 1000,
+            zIndex: 1200,
             backdropFilter: 'blur(8px)'
         }}>
             <div className="modal-content" style={{
@@ -954,9 +954,14 @@ export default function DepositWithdrawModal({ isOpen, onClose, initialTab }) {
                                                 alt={item.item_name}
                                                 style={{ width: '80px', height: '80px', objectFit: 'contain', marginBottom: '8px' }}
                                             />
-                                            <div style={{ fontSize: '11px', color: 'rgba(255, 255, 255, 0.8)', fontWeight: 500, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden', height: '32px', marginBottom: '6px' }}>
+                                            <div style={{ fontSize: '11px', color: 'rgba(255, 255, 255, 0.8)', fontWeight: 500, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden', height: '32px', marginBottom: '4px' }}>
                                                 {item.item_name}
                                             </div>
+                                            {item.float_value !== undefined && item.float_value !== null && (
+                                                <div style={{ fontSize: '10px', color: 'rgba(255, 255, 255, 0.4)', marginBottom: '4px' }}>
+                                                    Float: {item.float_value.toFixed(4)}
+                                                </div>
+                                            )}
                                             <div style={{ color: 'var(--accent-green)', fontWeight: 600, fontSize: '13px', display: 'flex', alignItems: 'center', gap: '4px', marginBottom: '8px' }}>
                                                 <Gem size={12} /> {item.item_value.toFixed(2)}
                                             </div>
@@ -983,17 +988,8 @@ export default function DepositWithdrawModal({ isOpen, onClose, initialTab }) {
 
                     {!loading && activeTab === 'payouts' && (
                         <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                <div style={{ fontSize: '14px', color: 'rgba(255, 255, 255, 0.5)' }}>
-                                    Active items undergoing the 7 days trade lock (remaining 50% payout).
-                                </div>
-                                <button 
-                                    onClick={handleForceMature}
-                                    className="btn-secondary"
-                                    style={{ fontSize: '12px', padding: '6px 12px' }}
-                                >
-                                    Force Mature All (Dev Test)
-                                </button>
+                            <div style={{ fontSize: '14px', color: 'rgba(255, 255, 255, 0.5)' }}>
+                                Active items undergoing the 7 days trade lock (remaining 50% payout).
                             </div>
                             
                             {pendingDeposits.length === 0 ? (

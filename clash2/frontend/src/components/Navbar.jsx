@@ -53,6 +53,17 @@ export default function Navbar({ onToggleSidebar }) {
                     >
                         <Menu size={24} />
                     </button>
+                    <Link to="/" className="navbar-brand" aria-label="csmolly.bet home" style={{
+                        fontSize: '22px',
+                        fontWeight: 900,
+                        background: 'linear-gradient(135deg, #FF6B35 0%, #FF8C00 50%, #FFB347 100%)',
+                        WebkitBackgroundClip: 'text',
+                        WebkitTextFillColor: 'transparent',
+                        marginRight: '20px',
+                        textDecoration: 'none'
+                    }}>
+                        CSMOLLY.BET
+                    </Link>
                     <div ref={dropdownRef} className="games-dropdown-wrapper" style={{ position: 'relative' }}>
                         <button
                             type="button"
@@ -104,17 +115,7 @@ export default function Navbar({ onToggleSidebar }) {
                     </div>
                 </div>
 
-                <Link to="/" className="navbar-center" aria-label="Bluegem home">
-                    <span style={{
-                        fontSize: '22px',
-                        fontWeight: 900,
-                        background: 'linear-gradient(135deg, #1b75ff 0%, #2bd2ff 35%, #ffb800 80%, #ff8c00 100%)',
-                        WebkitBackgroundClip: 'text',
-                        WebkitTextFillColor: 'transparent'
-                    }}>
-                        BLUEGEM
-                    </span>
-                </Link>
+                <div className="navbar-center" />
 
                 <div className="navbar-right">
                     {user ? (

@@ -79,37 +79,35 @@ const startPayoutReleaseLoop = () => {
 
             if (rows && rows.length > 0) {
                 console.log(`[Tradebot] Found ${rows.length} matured deposits ready for payout.`);
-                rows.forEach(row => {
-                    const remainingPayout = row.item_value * 0.5;
-                    db.serialize(() => {
-                        db.run('BEGIN TRANSACTION');
-                        
-                        // Credit the remaining 50% gems to the user
+                db.serialize(() => {
+                    db.run('BEGIN TRANSACTION');
+                    let success = true;
+                    rows.forEach(row => {
+                        const remainingPayout = row.item_value * 0.5;
+                        if (!success) return;
                         db.run('UPDATE users SET gems = gems + ? WHERE id = ?', [remainingPayout, row.user_id], (updateErr) => {
                             if (updateErr) {
                                 console.error(`[Tradebot] Error crediting remaining gems to user ${row.user_id}:`, updateErr.message);
+                                success = false;
                                 db.run('ROLLBACK');
                                 return;
                             }
-                            
-                            // Mark deposit as completed
                             db.run('UPDATE deposits SET status = \'completed\' WHERE id = ?', [row.id], (statusErr) => {
                                 if (statusErr) {
                                     console.error(`[Tradebot] Error updating deposit ${row.id} status:`, statusErr.message);
+                                    success = false;
                                     db.run('ROLLBACK');
                                     return;
                                 }
-
-                                db.run('COMMIT', (commitErr) => {
-                                    if (commitErr) {
-                                        console.error('[Tradebot] Transaction commit failed:', commitErr.message);
-                                    } else {
-                                        console.log(`[Tradebot] Payout successful: Credited ${remainingPayout} gems to ${row.username} for matured deposit of ${row.item_name}.`);
-                                    }
-                                });
+                                console.log(`[Tradebot] Payout successful: Credited ${remainingPayout} gems to ${row.username} for matured deposit of ${row.item_name}.`);
                             });
                         });
                     });
+                    if (success) {
+                        db.run('COMMIT', (commitErr) => {
+                            if (commitErr) console.error('[Tradebot] Transaction commit failed:', commitErr.message);
+                        });
+                    }
                 });
             }
         });
