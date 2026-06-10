@@ -21,7 +21,7 @@ export default function LiveGamesFeed() {
     const timeouts = [];
     feedSocket.on('game_feed_update', (update) => {
       const tId = setTimeout(() => {
-        setFeedItems(prev => [update, ...prev].slice(0, 50));
+        setFeedItems(prev => [update, ...prev].slice(0, 20));
         const idx = timeouts.indexOf(tId);
         if (idx > -1) timeouts.splice(idx, 1);
       }, 5000);
@@ -72,7 +72,7 @@ export default function LiveGamesFeed() {
           }}
         >Top</button>
       </div>
-      <div className="feed-messages" style={{ flex: 1, overflowY: 'auto', padding: '10px 15px 15px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
+      <div className="feed-messages" style={{ flex: 1, overflow: 'hidden', padding: '10px 15px 15px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
       {filteredFeed.map((item, i) => {
         const isWin = item.profit > 0;
         return (

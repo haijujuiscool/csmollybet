@@ -182,6 +182,10 @@ button:hover {
   white-space: nowrap;
 }
 
+.navbar-mobile-right {
+  display: none;
+}
+
 .mobile-user-btn {
   display: none;
 }

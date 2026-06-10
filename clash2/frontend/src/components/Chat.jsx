@@ -35,7 +35,7 @@ export default function Chat({ isCollapsed, onToggleCollapse }) {
         });
 
         socket.on('chat_message', (msg) => {
-            setMessages(prev => [...prev, msg].slice(-50)); // Keep last 50
+            setMessages(prev => [...prev, msg].slice(-30));
         });
 
         return () => {
@@ -148,7 +148,7 @@ export default function Chat({ isCollapsed, onToggleCollapse }) {
                 </div>
 
                 {(view === 'chat' || isDesktop) ? (
-                    <div className="chat-messages" style={{ flex: 1, overflowY: 'auto', padding: '15px', display: 'flex', flexDirection: 'column', gap: '12px', opacity: hasChatAccess ? 1 : 0.5, filter: hasChatAccess ? 'none' : 'grayscale(0.6)' }}>
+                    <div className="chat-messages" style={{ flex: 1, overflow: 'hidden', padding: '15px', display: 'flex', flexDirection: 'column', gap: '12px', opacity: hasChatAccess ? 1 : 0.5, filter: hasChatAccess ? 'none' : 'grayscale(0.6)' }}>
                         {messages.map((msg, i) => (
                             <div key={i} style={{ display: 'flex', alignItems: 'flex-start', gap: '8px', fontSize: '14px', wordBreak: 'break-word', color: '#fff' }}>
                                 <img 
