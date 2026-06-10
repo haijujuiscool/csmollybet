@@ -13,13 +13,13 @@ Diese Dokumentation fasst den aktuellen Stand des Projekts zusammen, damit in ei
 - `frontend/src/utils/sounds.js`: Web Audio API Modul für alle Soundeffekte (Karten, Explosionen, Ticks).
 - `frontend/src/components/Chat.jsx`: Chat-Sidebar mit Live Chat und **Live Game Feed** (Toggle zwischen beiden Views).
 - `frontend/src/components/RouletteSpinner.jsx`: Roulette-Spinner-Animation für Case Openings (mit Mythic-Spin Support).
+- `frontend/src/components/Navbar.jsx`: Navbar mit Brand "CSMOLLY", Games-Dropdown, Balance-Anzeige, User-Dropdown (Desktop + Mobile).
+- `frontend/src/components/LiveGamesFeed.jsx`: Live Game Feed mit All/Top-Filter und Steam-Avatar-Anzeige.
+- `frontend/src/index.css`: Globales Styling inkl. responsive Breakpoints (mobile/tablet ≤1280px, tablet 769–1280px, desktop ≥1281px).
 - `backend/server.js`: Hauptserver, API-Endpunkte, SQLite-Queries, `broadcastGameResult()`-Funktion für den Game Feed.
 - `backend/battleEngine.js`: Externe Logik für Case Battles (Lobby, Timer, Bot-Logik, Game Feed Broadcast).
 - `backend/chatEngine.js`: Socket.io Chat + Game Feed History Emission bei Verbindung.
 - `backend/admin.js`: CLI-Tool für Admin-Aufgaben (z.B. Gems vergeben: `node admin.js add-gems Username 1000`).
-- `frontend/src/components/Navbar.jsx`: Navbar mit Brand "CSMOLLY", Games-Dropdown, Balance-Anzeige, User-Dropdown (Desktop + Mobile).
-- `frontend/src/components/LiveGamesFeed.jsx`: Live Game Feed mit All/Top-Filter und Steam-Avatar-Anzeige.
-- `frontend/src/index.css`: Globales Styling inkl. responsive Breakpoints (mobile/tablet ≤1280px, tablet 769–1280px, desktop ≥1281px).
 
 ## 🎮 Implementierte Spielmodi
 1. **Cases (Solo & Creator):** Eigene Cases können erstellt werden. Items haben Bilder und Wahrscheinlichkeiten. "Mythic Spin" Modus (hebt Items >150% Profit hervor). Erstellungs-Option für Case Battles wurde in den `/battles` Bereich verschoben.
@@ -174,4 +174,3 @@ cd frontend && npm run build
 Das Backend servt statische Dateien aus `frontend/dist/`.
 
 *(Alle Konsolen-Outputs und Fehler logs erscheinen im Backend-Terminal, Socket-Events sind in der Netzwerkanalyse des Browsers sichtbar.)*
-
