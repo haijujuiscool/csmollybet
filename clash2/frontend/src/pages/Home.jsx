@@ -61,23 +61,15 @@ export default function Home() {
                 {/* User Portal / Call To Action */}
                 {!user ? (
                     <div style={{ display: 'flex', gap: '15px', justifyContent: 'center' }}>
-                        <Link to="/login" className="btn-primary" style={{
+                        <a href="/api/auth/steam" className="btn-primary" style={{
                             padding: '14px 35px',
                             borderRadius: '10px',
                             fontSize: '1.1rem',
                             boxShadow: '0 4px 15px rgba(255, 193, 7, 0.3)',
                             transition: 'all 0.2s ease-in-out'
                         }}>
-                            Login
-                        </Link>
-                        <Link to="/register" className="btn-secondary" style={{
-                            padding: '14px 35px',
-                            borderRadius: '10px',
-                            fontSize: '1.1rem',
-                            transition: 'all 0.2s ease-in-out'
-                        }}>
-                            Register
-                        </Link>
+                            Login with Steam
+                        </a>
                     </div>
                 ) : (
                     <div style={{

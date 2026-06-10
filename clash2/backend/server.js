@@ -72,19 +72,22 @@ app.get('/api/status', (req, res) => {
 global.gameFeedHistory = [];
 global.broadcastGameResult = (username, gameName, betAmount, payoutAmount, multiplier) => {
     const profit = payoutAmount - betAmount;
-    const update = {
-        username,
-        game: gameName,
-        bet: parseFloat(betAmount.toFixed(2)),
-        multiplier: parseFloat(multiplier.toFixed(2)),
-        profit: parseFloat(profit.toFixed(2)),
-        timestamp: Date.now()
-    };
-    global.gameFeedHistory.push(update);
-    if (global.gameFeedHistory.length > 50) {
-        global.gameFeedHistory.shift();
-    }
-    io.emit('game_feed_update', update);
+    db.get('SELECT avatar FROM users WHERE username = ?', [username], (err, row) => {
+        const update = {
+            username,
+            avatar: row && row.avatar ? row.avatar : '',
+            game: gameName,
+            bet: parseFloat(betAmount.toFixed(2)),
+            multiplier: parseFloat(multiplier.toFixed(2)),
+            profit: parseFloat(profit.toFixed(2)),
+            timestamp: Date.now()
+        };
+        global.gameFeedHistory.push(update);
+        if (global.gameFeedHistory.length > 50) {
+            global.gameFeedHistory.shift();
+        }
+        io.emit('game_feed_update', update);
+    });
 };
 
 battleEngine(io);

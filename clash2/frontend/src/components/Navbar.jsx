@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { Link } from 'react-router-dom';
-import { Gem, LogOut, Menu, WalletCards } from 'lucide-react';
+import { Gem, LogOut, Menu, User, WalletCards } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import DepositWithdrawModal from './DepositWithdrawModal';
 
@@ -15,12 +15,17 @@ export default function Navbar({ onToggleSidebar }) {
     const { user, logout } = useAuth();
     const [tradeModal, setTradeModal] = useState(null);
     const [gamesOpen, setGamesOpen] = useState(false);
+    const [userMenuOpen, setUserMenuOpen] = useState(false);
     const dropdownRef = useRef(null);
+    const userMenuRef = useRef(null);
 
     useEffect(() => {
         const handleOutsideClick = (e) => {
             if (dropdownRef.current && !dropdownRef.current.contains(e.target)) {
                 setGamesOpen(false);
+            }
+            if (userMenuRef.current && !userMenuRef.current.contains(e.target)) {
+                setUserMenuOpen(false);
             }
         };
         document.addEventListener('mousedown', handleOutsideClick);
@@ -62,7 +67,7 @@ export default function Navbar({ onToggleSidebar }) {
                         marginRight: '20px',
                         textDecoration: 'none'
                     }}>
-                        CSMOLLY.BET
+                        CSMOLLY
                     </Link>
                     <div ref={dropdownRef} className="games-dropdown-wrapper" style={{ position: 'relative' }}>
                         <button
@@ -115,15 +120,88 @@ export default function Navbar({ onToggleSidebar }) {
                     </div>
                 </div>
 
-                <div className="navbar-center" />
+                <div ref={userMenuRef} className="navbar-mobile-right">
+                    <button
+                        type="button"
+                        className="btn-secondary navbar-action mobile-user-btn"
+                        onClick={() => setUserMenuOpen(prev => !prev)}
+                        aria-label="User menu"
+                    >
+                        {user ? (
+                            <img
+                                src={user.avatar}
+                                alt=""
+                                style={{ width: '24px', height: '24px', borderRadius: '50%', objectFit: 'cover' }}
+                            />
+                        ) : (
+                            <User size={20} />
+                        )}
+                    </button>
+                    {userMenuOpen && (
+                        <div
+                            className="mobile-user-dropdown"
+                            style={{
+                                position: 'absolute',
+                                right: 0,
+                                top: '100%',
+                                background: 'rgba(0,0,0,0.95)',
+                                border: '1px solid #444',
+                                borderRadius: '6px',
+                                padding: '8px',
+                                zIndex: 1000,
+                                minWidth: '180px'
+                            }}
+                        >
+                            {user ? (
+                                <>
+                                    <div style={{ padding: '8px 12px', color: 'var(--accent-green)', fontWeight: 'bold', display: 'flex', alignItems: 'center', gap: '6px', fontSize: '14px' }}>
+                                        <Gem size={16} />
+                                        {formattedBalance}
+                                    </div>
+                                    <div style={{ borderTop: '1px solid #333', margin: '4px 0' }} />
+                                    <button
+                                        className="dropdown-item"
+                                        style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '8px 12px', color: '#fff', background: 'none', border: 'none', borderRadius: '4px', width: '100%', textAlign: 'left', cursor: 'pointer', fontSize: '14px' }}
+                                        onClick={() => { setTradeModal('deposit'); setUserMenuOpen(false); }}
+                                    >
+                                        <WalletCards size={16} />
+                                        Deposit
+                                    </button>
+                                    <button
+                                        className="dropdown-item"
+                                        style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '8px 12px', color: '#fff', background: 'none', border: 'none', borderRadius: '4px', width: '100%', textAlign: 'left', cursor: 'pointer', fontSize: '14px' }}
+                                        onClick={() => { logout(); setUserMenuOpen(false); }}
+                                    >
+                                        <LogOut size={16} />
+                                        Logout
+                                    </button>
+                                </>
+                            ) : (
+                                <a
+                                    className="dropdown-item"
+                                    href="/api/auth/steam"
+                                    style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '8px 12px', color: '#fff', textDecoration: 'none', borderRadius: '4px', fontSize: '14px' }}
+                                >
+                                    <User size={16} />
+                                    Login
+                                </a>
+                            )}
+                        </div>
+                    )}
+                </div>
+
+                {user && (
+                    <div className="navbar-center">
+                        <div className="gem-balance">
+                            <Gem size={18} />
+                            <span>{formattedBalance}</span>
+                        </div>
+                    </div>
+                )}
 
                 <div className="navbar-right">
                     {user ? (
                         <>
-                            <div className="gem-balance">
-                                <Gem size={18} />
-                                <span>{formattedBalance}</span>
-                            </div>
                             <button
                                 type="button"
                                 className="btn-primary navbar-action"

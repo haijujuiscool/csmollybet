@@ -6,7 +6,6 @@ import Navbar from './components/Navbar';
 import Chat from './components/Chat';
 import Home from './pages/Home';
 import Login from './pages/Login';
-import Register from './pages/Register';
 import Double from './pages/Double';
 import Crash from './pages/Crash';
 import CaseCreator from './pages/CaseCreator';
@@ -71,7 +70,6 @@ function App() {
           <Routes>
             <Route path='/' element={<Home />} />
             <Route path='/login' element={<Login />} />
-            <Route path='/register' element={<Register />} />
             <Route path='/double' element={<Double />} />
             <Route path='/crash' element={<Crash />} />
             <Route path='/mines' element={<Mines />} />
@@ -85,12 +83,7 @@ function App() {
           </Routes>
         </div>
       </div>
-      <div className="feed-sidebar">
-        <div style={{ borderBottom: '2px solid #222', backgroundColor: '#111', padding: '15px 15px 10px 15px' }}>
-          <div style={{ fontWeight: 'bold', color: 'var(--accent-gold)', textTransform: 'uppercase', letterSpacing: '1.5px', fontSize: '15px' }}>
-            Live Game Feed
-          </div>
-        </div>
+            <div className="feed-sidebar">
         <LiveGamesFeed />
       </div>
 

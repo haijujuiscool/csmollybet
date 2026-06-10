@@ -36,36 +36,43 @@ export default function LiveGamesFeed() {
 
   const filteredFeed = feedItems.filter(item => {
     if (feedFilter === 'all') return true;
-    return item.bet > 0 && (item.profit / item.bet) > 10;
+    return item.bet > 0 && (item.profit / item.bet) > 5;
   });
 
   return (
-    <div className="feed-messages" style={{ flex: 1, overflowY: 'auto', padding: '15px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
+    <>
       {/* Filter Buttons */}
-      <div style={{ display: 'flex', gap: '8px', marginBottom: '8px' }}>
+      <div style={{ display: 'flex', gap: '8px', padding: '15px 15px 5px' }}>
         <button
           onClick={() => setFeedFilter('all')}
           style={{
-            padding: '4px 8px',
+            flex: 1,
+            padding: '8px 0',
             backgroundColor: feedFilter === 'all' ? 'rgba(255,193,7,0.2)' : '#1e1e1e',
             color: feedFilter === 'all' ? 'var(--accent-gold)' : '#aaa',
             border: feedFilter === 'all' ? '1px solid var(--accent-gold)' : '1px solid #2a2a2a',
             borderRadius: '4px',
-            cursor: 'pointer'
+            cursor: 'pointer',
+            fontSize: '13px',
+            fontWeight: 'bold'
           }}
         >All</button>
         <button
           onClick={() => setFeedFilter('top')}
           style={{
-            padding: '4px 8px',
+            flex: 1,
+            padding: '8px 0',
             backgroundColor: feedFilter === 'top' ? 'rgba(255,193,7,0.2)' : '#1e1e1e',
             color: feedFilter === 'top' ? 'var(--accent-gold)' : '#aaa',
             border: feedFilter === 'top' ? '1px solid var(--accent-gold)' : '1px solid #2a2a2a',
             borderRadius: '4px',
-            cursor: 'pointer'
+            cursor: 'pointer',
+            fontSize: '13px',
+            fontWeight: 'bold'
           }}
         >Top</button>
       </div>
+      <div className="feed-messages" style={{ flex: 1, overflowY: 'auto', padding: '10px 15px 15px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
       {filteredFeed.map((item, i) => {
         const isWin = item.profit > 0;
         return (
@@ -92,7 +99,12 @@ export default function LiveGamesFeed() {
           >
             {/* Top row: User and Game name */}
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <span style={{ fontWeight: 'bold', color: '#fff', fontSize: '13px' }}>{item.username}</span>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                {item.avatar && (
+                  <img src={item.avatar} alt="" style={{ width: '24px', height: '24px', borderRadius: '50%', objectFit: 'cover' }} />
+                )}
+                <span style={{ fontWeight: 'bold', color: '#fff', fontSize: '13px' }}>{item.username}</span>
+              </div>
               <span style={{
                 fontSize: '11px',
                 padding: '2px 8px',
@@ -113,11 +125,12 @@ export default function LiveGamesFeed() {
           </div>
         );
       })}
-      {feedItems.length === 0 && (
+        {feedItems.length === 0 && (
         <div style={{ textAlign: 'center', color: '#555', fontSize: '14px', marginTop: '40px' }}>
           Waiting for games...
         </div>
       )}
-    </div>
+      </div>
+    </>
   );
 }

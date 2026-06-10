@@ -12,12 +12,12 @@ export default function Chat({ isCollapsed, onToggleCollapse }) {
     const [input, setInput] = useState('');
     const [isConnecting, setIsConnecting] = useState(true);
     const [isOpen, setIsOpen] = useState(false);
-    const [isDesktop, setIsDesktop] = useState(window.innerWidth >= 769);
+    const [isDesktop, setIsDesktop] = useState(window.innerWidth >= 1281);
     const messagesEndRef = useRef(null);
 
     useEffect(() => {
         const handleResize = () => {
-            setIsDesktop(window.innerWidth >= 769);
+            setIsDesktop(window.innerWidth >= 1281);
         };
         window.addEventListener('resize', handleResize);
         return () => window.removeEventListener('resize', handleResize);
@@ -57,6 +57,24 @@ export default function Chat({ isCollapsed, onToggleCollapse }) {
         messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
     }, [messages]);
 
+    useEffect(() => {
+        let scrollY = 0;
+        if (isOpen && !isDesktop) {
+            scrollY = window.scrollY;
+            document.body.style.position = 'fixed';
+            document.body.style.top = `-${scrollY}px`;
+            document.body.style.width = '100%';
+            document.documentElement.style.overflow = 'hidden';
+        }
+        return () => {
+            document.body.style.position = '';
+            document.body.style.top = '';
+            document.body.style.width = '';
+            document.documentElement.style.overflow = '';
+            window.scrollTo(0, scrollY);
+        };
+    }, [isOpen, isDesktop]);
+
     const hasChatAccess = user?.gems > 0;
 
     const sendMessage = () => {
@@ -80,7 +98,7 @@ export default function Chat({ isCollapsed, onToggleCollapse }) {
                 {/* Desktop Title Bar */}
                 <div className="chat-title-bar" style={{ borderBottom: '2px solid #222', backgroundColor: '#111', padding: '15px 15px 10px 15px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                     <div style={{ fontWeight: 'bold', color: 'var(--accent-gold)', textTransform: 'uppercase', letterSpacing: '1.5px', fontSize: '15px' }}>
-                        Live Chat
+                        Chat
                     </div>
                 </div>
 
@@ -185,7 +203,17 @@ export default function Chat({ isCollapsed, onToggleCollapse }) {
                 )}
             </div>
 
-            {/* Mobile view rendering handled by CSS and side-by-side layout */}
+            {/* Mobile chat toggle button */}
+            <button
+                className="chat-toggle-btn"
+                onClick={() => setIsOpen(true)}
+                aria-label="Open chat"
+                style={{ display: isOpen && !isDesktop ? 'none' : 'flex' }}
+            >
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
+                </svg>
+            </button>
         </>
     );
 }
