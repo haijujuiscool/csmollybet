@@ -230,7 +230,7 @@ async function main() {
         const wear = getWear(name);
         const price = await fetchPrice(name);
         const imgUrl = getImg(name);
-        const priceVal = (price !== null && price >= 0.1 && price <= 50) ? price : parseFloat((Math.random() * 45 + 0.5).toFixed(2));
+        const priceVal = (price !== null && price >= 0.1) ? price : parseFloat((Math.random() * 45 + 0.5).toFixed(2));
         const floatVal = getFloat(wear);
         finalItems.push({ name: name, price: priceVal, imgUrl, floatVal });
 

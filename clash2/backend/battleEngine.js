@@ -10,6 +10,16 @@ const wagerGems = (userId, amount) => {
     });
 };
 
+const logBalanceChange = (userId, change, description, multiplier) => {
+    db.get('SELECT gems FROM users WHERE id = ?', [userId], (err, row) => {
+        if (err || !row) return;
+        db.run('INSERT INTO balance_history (user_id, change, new_balance, description, multiplier) VALUES (?, ?, ?, ?, ?)',
+            [userId, change, row.gems, description || null, multiplier || null],
+            (err) => { if (err) console.error('[BalanceLog] Failed to log:', err.message); }
+        );
+    });
+};
+
 module.exports = (io) => {
     const battleCreateCooldown = new Map(); // userId -> timestamp
 
@@ -25,11 +35,11 @@ module.exports = (io) => {
                 return safeCallback({ error: 'Not authenticated' });
             }
 
-            // 1-second cooldown between battle creations
+            // 5-second cooldown between battle creations
             const now = Date.now();
             const lastCreate = battleCreateCooldown.get(socket.userId) || 0;
-            if (now - lastCreate < 1000) {
-                return safeCallback({ error: 'Please wait 1 second between creating battles.' });
+            if (now - lastCreate < 5000) {
+                return safeCallback({ error: 'Please wait 5 seconds between creating battles.' });
             }
             battleCreateCooldown.set(socket.userId, now);
 
@@ -348,6 +358,9 @@ module.exports = (io) => {
             winners.forEach(w => {
                 if (!w.isBot) db.run('UPDATE users SET gems = gems + ? WHERE id = ?', [payoutPerWinner, w.id]);
             });
+            winners.forEach(w => {
+                if (!w.isBot) logBalanceChange(w.id, payoutPerWinner, 'Battle', null);
+            });
         } else if (battle.mode === 'ffa') {
             // FFA Mode / Group Mode: Split the total loot among ALL players equally
             winners = battle.players;
@@ -355,6 +368,9 @@ module.exports = (io) => {
             const payoutPerWinner = totalLoot / winners.length;
             winners.forEach(w => {
                 if (!w.isBot) db.run('UPDATE users SET gems = gems + ? WHERE id = ?', [payoutPerWinner, w.id]);
+            });
+            winners.forEach(w => {
+                if (!w.isBot) logBalanceChange(w.id, payoutPerWinner, 'Battle', null);
             });
         } else {
             // Other modes (solo, 1v1, 1v1v1)
@@ -372,6 +388,9 @@ module.exports = (io) => {
             const payoutPerWinner = totalLoot / winners.length;
             winners.forEach(w => {
                 if (!w.isBot) db.run('UPDATE users SET gems = gems + ? WHERE id = ?', [payoutPerWinner, w.id]);
+            });
+            winners.forEach(w => {
+                if (!w.isBot) logBalanceChange(w.id, payoutPerWinner, 'Battle', null);
             });
         }
 

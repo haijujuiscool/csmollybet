@@ -1,13 +1,15 @@
 import { useState, useEffect, useRef } from 'react';
-import { useParams } from 'react-router-dom';
+import { useParams, useNavigate } from 'react-router-dom';
 import { io } from 'socket.io-client';
 import { useAuth } from '../contexts/AuthContext';
 import RouletteSpinner from '../components/RouletteSpinner';
+import battlesLogo from '../assets/battles.png';
 
 let socket;
 
 export default function Battle() {
     const { id } = useParams();
+    const navigate = useNavigate();
     const { user, refreshBalance } = useAuth();
     const [battle, setBattle] = useState(null);
     const [roundData, setRoundData] = useState(null);
@@ -15,6 +17,7 @@ export default function Battle() {
     const [revealedRound, setRevealedRound] = useState(-1); // which round's result has been revealed
     const [isProcessing, setIsProcessing] = useState(false);
     const isProcessingRef = useRef(false);
+    const recreateCooldownRef = useRef(false);
 
     useEffect(() => {
         // Reset all battle-related states to initial values when switching battles
@@ -95,7 +98,11 @@ export default function Battle() {
     };
 
     const handleRecreate = () => {
+        if (recreateCooldownRef.current) return;
         if (!user) return alert('Please login first');
+        
+        recreateCooldownRef.current = true;
+        setTimeout(() => { recreateCooldownRef.current = false; }, 5000);
         
         socket.emit('create_battle', { 
             mode: battle.mode, 
@@ -107,8 +114,7 @@ export default function Battle() {
             if (res.error) {
                 alert(res.error);
             } else {
-                // Navigate to the newly created battle
-                window.location.href = `/battle/${res.battleId}`;
+                navigate(`/battle/${res.battleId}`);
             }
         });
     };
@@ -330,7 +336,9 @@ export default function Battle() {
                     </div>
 
                     {/* VS Separator */}
-                    <div style={{ fontSize: '36px', fontWeight: 'bold', color: 'var(--accent-gold)', margin: '20px 0' }}>VS</div>
+                    <div style={{ margin: '20px 0' }}>
+                        <img src={battlesLogo} alt="VS" style={{ height: '48px', width: 'auto' }} />
+                    </div>
 
                     {/* Team 2 */}
                     <div style={{ display: 'flex', gap: '20px', justifyContent: 'center', flexWrap: 'wrap' }}>
@@ -344,8 +352,18 @@ export default function Battle() {
                     </div>
                 </div>
             ) : (
-                <div style={{ display: 'flex', gap: '20px', justifyContent: 'center', flexWrap: 'wrap' }}>
-                    {battle.players.map((p, i) => renderPlayer(p, i))}
+                <div style={{ display: 'flex', gap: '20px', justifyContent: 'center', flexWrap: 'wrap', alignItems: 'center' }}>
+                    {battle.players.flatMap((p, i) => {
+                        const elements = [renderPlayer(p, i)];
+                        if (i < battle.players.length - 1) {
+                            elements.push(
+                                <div key={`vs-${i}`} style={{ display: 'flex', alignItems: 'center' }}>
+                                    <img src={battlesLogo} alt="VS" style={{ height: '40px', width: 'auto' }} />
+                                </div>
+                            );
+                        }
+                        return elements;
+                    })}
                     
                     {/* Empty Slots */}
                     {battle.status === 'waiting' && Array.from({ length: battle.maxPlayers - battle.players.length }).map((_, i) => (

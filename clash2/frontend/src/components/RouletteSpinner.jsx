@@ -5,8 +5,12 @@ import emeraldImg from '../assets/emerald.png';
 const AudioContext = window.AudioContext || window.webkitAudioContext;
 const audioCtx = AudioContext ? new AudioContext() : null;
 
+function isSoundEnabled() {
+    return localStorage.getItem('soundEnabled') !== 'false';
+}
+
 function playTick() {
-    if (!audioCtx) return;
+    if (!audioCtx || !isSoundEnabled()) return;
     const osc = audioCtx.createOscillator();
     const gain = audioCtx.createGain();
     osc.connect(gain);
@@ -20,7 +24,7 @@ function playTick() {
 }
 
 function playWin() {
-    if (!audioCtx) return;
+    if (!audioCtx || !isSoundEnabled()) return;
     const notes = [523, 659, 784, 1047]; // C5 E5 G5 C6
     notes.forEach((freq, i) => {
         const osc = audioCtx.createOscillator();

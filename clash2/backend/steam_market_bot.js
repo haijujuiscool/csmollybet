@@ -115,7 +115,7 @@ async function searchWeaponSkins() {
                     const wear = getWear(item.name);
                     if (!wear) continue;
                     if (!item.name.includes(' | ')) continue;
-                    if (item.price < 0.1 || item.price > 50) continue;
+                    if (item.price < 0.1) continue;
                     const key = item.name.trim().toLowerCase();
                     if (seen.has(key)) continue;
                     seen.add(key);
@@ -283,7 +283,7 @@ async function checkPrices() {
         seen.add(key);
 
         const price = await fetchPrice(name);
-        if (price !== null && price >= 0.1 && price <= 50) {
+        if (price !== null && price >= 0.1) {
             const wear = getWear(name);
             const imgUrl = fallbackImages[i % fallbackImages.length];
             results.push({ name, price, imgUrl, floatVal: getFloat(wear) });

@@ -1,4 +1,4 @@
-import { Routes, Route } from 'react-router-dom';
+import { Routes, Route, useNavigate } from 'react-router-dom';
 import { useState, useEffect } from 'react';
 import axios from 'axios';
 import Sidebar from './components/Sidebar';
@@ -12,18 +12,55 @@ import CaseCreator from './pages/CaseCreator';
 import Cases from './pages/Cases';
 import Battles from './pages/Battles';
 import Battle from './pages/Battle';
+import Profile from './pages/Profile';
 import Mines from './pages/Mines';
 import Upgrader from './pages/Upgrader';
 import Admin from './pages/Admin';
 import Terms from './pages/Terms';
+import FreeDailyCase from './pages/FreeDailyCase';
 import AgeVerificationModal from './components/AgeVerificationModal';
+import WelcomeCaseModal from './components/WelcomeCaseModal';
+import Footer from './components/Footer';
 import LiveGamesFeed from './components/LiveGamesFeed';
+import { useAuth } from './contexts/AuthContext';
 
 function App() {
+  const { user, refreshBalance } = useAuth();
+  const navigate = useNavigate();
   const [isShutdown, setIsShutdown] = useState(false);
+  const [showWelcome, setShowWelcome] = useState(false);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [isChatCollapsed, setIsChatCollapsed] = useState(false);
   const [isFeedCollapsed, setIsFeedCollapsed] = useState(false);
+
+  useEffect(() => {
+    // Capture referral code from URL
+    const params = new URLSearchParams(window.location.search);
+    const refCode = params.get('ref');
+    if (refCode) {
+      localStorage.setItem('referral_code', refCode);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (user && !user.onboarding_done && !showWelcome) {
+      // Auto-apply referral code if present in localStorage
+      const refCode = localStorage.getItem('referral_code');
+      if (refCode) {
+        axios.post('/api/user/referral-code', { code: refCode }, {
+          headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
+        }).then(() => {
+          localStorage.removeItem('referral_code');
+          refreshBalance();
+        }).catch(() => {
+          // Invalid code, show welcome modal
+          setShowWelcome(true);
+        });
+      } else {
+        setShowWelcome(true);
+      }
+    }
+  }, [user]);
 
   useEffect(() => {
     if (window.location.pathname === '/shutdown') {
@@ -62,9 +99,12 @@ function App() {
   return (
     <div className={`app-layout ${isChatCollapsed ? 'chat-collapsed' : ''} ${isFeedCollapsed ? 'feed-collapsed' : ''}`}>
       <AgeVerificationModal />
+      {showWelcome && user && !user.onboarding_done && (
+        <WelcomeCaseModal user={user} onClose={() => { setShowWelcome(false); navigate('/daily-case'); }} refreshBalance={refreshBalance} />
+      )}
       <Sidebar isOpen={isSidebarOpen} onClose={() => setIsSidebarOpen(false)} />
       <Chat isCollapsed={isChatCollapsed} onToggleCollapse={() => setIsChatCollapsed(!isChatCollapsed)} />
-      <div className='main-content'>
+            <div className='main-content'>
         <Navbar onToggleSidebar={() => setIsSidebarOpen(!isSidebarOpen)} />
         <div className='page-content'>
           <Routes>
@@ -80,8 +120,11 @@ function App() {
             <Route path='/battle/:id' element={<Battle />} />
             <Route path='/admin' element={<Admin />} />
             <Route path='/terms' element={<Terms />} />
+            <Route path='/profile' element={<Profile />} />
+            <Route path='/daily-case' element={<FreeDailyCase />} />
           </Routes>
         </div>
+        <Footer />
       </div>
             <div className="feed-sidebar">
         <LiveGamesFeed />

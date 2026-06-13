@@ -1,9 +1,11 @@
 import { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { io } from 'socket.io-client';
 
 let feedSocket;
 
 export default function LiveGamesFeed() {
+  const navigate = useNavigate();
   const [feedItems, setFeedItems] = useState([]);
   const [feedFilter, setFeedFilter] = useState('all'); // 'all' or 'top'
 
@@ -39,6 +41,22 @@ export default function LiveGamesFeed() {
     return item.bet > 0 && (item.profit / item.bet) > 5;
   });
 
+  const gameRoutes = {
+    'Double': '/double',
+    'Crash': '/crash',
+    'Mines': '/mines',
+    'Battles': '/battles',
+    'Cases': '/cases',
+    'Upgrader': '/upgrader'
+  };
+
+  const handleItemClick = (game) => {
+    const route = gameRoutes[game];
+    if (route) {
+      navigate(route);
+    }
+  };
+
   return (
     <>
       {/* Filter Buttons */}
@@ -72,12 +90,13 @@ export default function LiveGamesFeed() {
           }}
         >Top</button>
       </div>
-      <div className="feed-messages" style={{ flex: 1, overflow: 'hidden', padding: '10px 15px 15px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
+      <div className="feed-messages" style={{ flex: 1, overflowY: 'auto', overflowX: 'hidden', padding: '10px 15px 15px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
       {filteredFeed.map((item, i) => {
         const isWin = item.profit > 0;
         return (
           <div
             key={i}
+            onClick={() => handleItemClick(item.game)}
             style={{
               display: 'flex',
               flexDirection: 'column',
@@ -87,6 +106,7 @@ export default function LiveGamesFeed() {
               backgroundColor: '#161616',
               border: '1px solid #262626',
               transition: 'transform 0.2s, border-color 0.2s',
+              cursor: 'pointer',
             }}
             onMouseOver={e => {
               e.currentTarget.style.borderColor = isWin ? 'rgba(34, 197, 94, 0.4)' : 'rgba(239, 68, 68, 0.4)';

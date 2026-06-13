@@ -14,6 +14,7 @@ export default function Chat({ isCollapsed, onToggleCollapse }) {
     const [isOpen, setIsOpen] = useState(false);
     const [isDesktop, setIsDesktop] = useState(window.innerWidth >= 1281);
     const messagesEndRef = useRef(null);
+    const lastMessageTime = useRef(0);
 
     useEffect(() => {
         const handleResize = () => {
@@ -81,12 +82,18 @@ export default function Chat({ isCollapsed, onToggleCollapse }) {
         if (!user) return alert('Please login to chat');
         if (!hasChatAccess) return alert('Deposit to unlock chat');
         if (!input.trim()) return;
+        const now = Date.now();
+        if (now - lastMessageTime.current < 10000) {
+            const remaining = Math.ceil((10000 - (now - lastMessageTime.current)) / 1000);
+            return alert(`Please wait ${remaining} seconds before sending another message`);
+        }
 
         socket.emit('send_chat', { text: input }, (res) => {
             if (res?.error) {
                 alert(res.error);
             } else {
                 setInput('');
+                lastMessageTime.current = Date.now();
             }
         });
     };
@@ -148,7 +155,7 @@ export default function Chat({ isCollapsed, onToggleCollapse }) {
                 </div>
 
                 {(view === 'chat' || isDesktop) ? (
-                    <div className="chat-messages" style={{ flex: 1, overflow: 'hidden', padding: '15px', display: 'flex', flexDirection: 'column', gap: '12px', opacity: hasChatAccess ? 1 : 0.5, filter: hasChatAccess ? 'none' : 'grayscale(0.6)' }}>
+                    <div className="chat-messages" style={{ flex: 1, overflowY: 'auto', overflowX: 'hidden', padding: '15px', display: 'flex', flexDirection: 'column', gap: '12px', opacity: hasChatAccess ? 1 : 0.5, filter: hasChatAccess ? 'none' : 'grayscale(0.6)' }}>
                         {messages.map((msg, i) => (
                             <div key={i} style={{ display: 'flex', alignItems: 'flex-start', gap: '8px', fontSize: '14px', wordBreak: 'break-word', color: '#fff' }}>
                                 <img 

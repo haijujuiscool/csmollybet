@@ -107,6 +107,12 @@ const upload = multer({
 
 app.use('/uploads', express.static(uploadDir));
 
+const transfersDir = path.join(__dirname, 'public', 'transfers');
+if (!fs.existsSync(transfersDir)) {
+    fs.mkdirSync(transfersDir, { recursive: true });
+}
+app.use('/transfers', express.static(transfersDir));
+
 const { JWT_SECRET } = require('./security');
 
 // Authentication Middleware
@@ -117,10 +123,13 @@ const authenticateToken = (req, res, next) => {
 
     jwt.verify(token, JWT_SECRET, (err, decoded) => {
         if (err) return res.sendStatus(403);
-        db.get('SELECT is_banned, role FROM users WHERE id = ?', [decoded.id], (dbErr, row) => {
+        db.get('SELECT is_banned, role, token_version FROM users WHERE id = ?', [decoded.id], (dbErr, row) => {
             if (dbErr || !row) return res.sendStatus(403);
             if (row.is_banned) {
                 return res.status(403).json({ error: 'Your account has been banned.' });
+            }
+            if (decoded.token_version !== undefined && row.token_version !== decoded.token_version) {
+                return res.sendStatus(401);
             }
             req.user = { ...decoded, role: row.role };
             next();
@@ -132,6 +141,81 @@ const wagerGems = (userId, amount) => {
     if (!amount || amount <= 0) return;
     db.run('UPDATE users SET wager_req = CASE WHEN wager_req - ? < 0 THEN 0 ELSE wager_req - ? END WHERE id = ?', [amount, amount, userId], (err) => {
         if (err) console.error('[Wager] Failed to update wager requirement:', err.message);
+    });
+    trackAffiliateWager(userId, amount);
+};
+
+const logBalanceChange = (userId, change, description, multiplier) => {
+    db.get('SELECT gems FROM users WHERE id = ?', [userId], (err, row) => {
+        if (err || !row) return;
+        db.run('INSERT INTO balance_history (user_id, change, new_balance, description, multiplier) VALUES (?, ?, ?, ?, ?)',
+            [userId, change, row.gems, description || null, multiplier || null],
+            (err) => { if (err) console.error('[BalanceLog] Failed to log:', err.message); }
+        );
+    });
+};
+
+// Compute SHA256 hash of the required PFP image for requirements check
+let requiredPfpHash = null;
+const pfpPath = path.join(__dirname, '..', 'frontend', 'public', 'pfp.png');
+(async () => {
+    try {
+        if (fs.existsSync(pfpPath)) {
+            const imgBuffer = fs.readFileSync(pfpPath);
+            const resized = await sharp(imgBuffer).resize(32, 32).grayscale().raw().toBuffer();
+            requiredPfpHash = require('crypto').createHash('sha256').update(resized).digest('hex');
+            console.log('[PFP] Required PFP hash computed:', requiredPfpHash);
+        } else {
+            console.warn('[PFP] pfp.png not found at', pfpPath);
+        }
+    } catch (e) {
+        console.error('[PFP] Error computing PFP hash:', e.message);
+    }
+})();
+
+// Affiliate tracking helpers
+const trackAffiliateDeposit = (userId, amount) => {
+    if (!amount || amount <= 0) return;
+    db.get('SELECT referred_by FROM users WHERE id = ?', [userId], (err, user) => {
+        if (err || !user || !user.referred_by) return;
+        const commission = amount * 0.05; // 5% of deposit
+        db.run('UPDATE users SET gems = gems + ?, affiliate_earnings = affiliate_earnings + ? WHERE id = ?',
+            [commission, commission, user.referred_by]);
+        db.run('INSERT INTO affiliate_transactions (affiliate_id, referred_user_id, type, amount, commission) VALUES (?, ?, ?, ?, ?)',
+            [user.referred_by, userId, 'deposit', amount, commission]);
+    });
+};
+
+const trackAffiliateWager = (userId, betAmount) => {
+    if (!betAmount || betAmount <= 0) return;
+    db.get('SELECT referred_by FROM users WHERE id = ?', [userId], (err, user) => {
+        if (err || !user || !user.referred_by) return;
+        const commission = betAmount * 0.003; // ~10% of house edge (~3%)
+        db.run('UPDATE users SET gems = gems + ?, affiliate_earnings = affiliate_earnings + ? WHERE id = ?',
+            [commission, commission, user.referred_by]);
+        db.run('INSERT INTO affiliate_transactions (affiliate_id, referred_user_id, type, amount, commission) VALUES (?, ?, ?, ?, ?)',
+            [user.referred_by, userId, 'wager', betAmount, commission]);
+    });
+};
+
+// Helper to apply a referral code
+const applyReferralCode = (userId, code) => {
+    return new Promise((resolve, reject) => {
+        if (!code || typeof code !== 'string') return reject('Invalid referral code');
+        db.get('SELECT id FROM users WHERE affiliate_code = ? AND id != ?', [code.toLowerCase(), userId], (err, aff) => {
+            if (err) return reject('Database error');
+            if (!aff) return reject('Invalid referral code');
+            db.get('SELECT referred_by, onboarding_done FROM users WHERE id = ?', [userId], (err, user) => {
+                if (err) return reject('Database error');
+                if (!user) return reject('User not found');
+                if (user.referred_by) return reject('You already used a referral code');
+                if (user.onboarding_done) return reject('Onboarding already completed');
+                db.run('UPDATE users SET referred_by = ?, welcome_cases = 3, onboarding_done = 1 WHERE id = ?', [aff.id, userId], (err) => {
+                    if (err) return reject('Database error updating user');
+                    resolve({ cases: 3, affiliateName: null });
+                });
+            });
+        });
     });
 };
 
@@ -224,21 +308,21 @@ app.get('/api/auth/steam/return', async (req, res) => {
                 db.run('UPDATE users SET username = ?, avatar = ? WHERE id = ?', [username, avatar, user.id], (updateErr) => {
                     if (updateErr) console.error('Failed to update user profile info:', updateErr);
                     
-                    const token = jwt.sign({ id: user.id, username, role: user.role }, JWT_SECRET);
+                    const token = jwt.sign({ id: user.id, username, role: user.role, token_version: user.token_version || 0 }, JWT_SECRET);
                     sendAuthHTML(res, token);
                 });
             } else {
-                // Register a new user
+                // Register a new user with an auto-generated affiliate code
                 const initialGems = 0.1;
                 const initialWagerReq = 2.0;
-                db.run('INSERT INTO users (steamid, username, avatar, gems, role, wager_req) VALUES (?, ?, ?, ?, ?, ?)', 
-                    [steamid, username, avatar, initialGems, 'user', initialWagerReq], 
+                db.run('INSERT INTO users (steamid, username, avatar, gems, role, wager_req, onboarding_done, player_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?)', 
+                    [steamid, username, avatar, initialGems, 'user', initialWagerReq, 0, 100000 + Math.floor(Math.random() * 900000)], 
                     function (insertErr) {
                         if (insertErr) {
                             console.error(insertErr);
                             return res.status(500).send('Database error registering user');
                         }
-                        const token = jwt.sign({ id: this.lastID, username, role: 'user' }, JWT_SECRET);
+                        const token = jwt.sign({ id: this.lastID, username, role: 'user', token_version: 0 }, JWT_SECRET);
                         sendAuthHTML(res, token);
                     }
                 );
@@ -270,9 +354,19 @@ function sendAuthHTML(res, token) {
 }
 
 app.get('/api/me', authenticateToken, (req, res) => {
-    db.get('SELECT id, username, gems, role, avatar, steamid, trade_url, date_of_birth, accepted_tos, wager_req FROM users WHERE id = ?', [req.user.id], (err, user) => {
+    db.get('SELECT id, username, gems, role, avatar, steamid, trade_url, date_of_birth, accepted_tos, wager_req, affiliate_code, affiliate_earnings, referred_by, last_daily_case, welcome_cases, daily_case_streak, onboarding_done, player_id FROM users WHERE id = ?', [req.user.id], (err, user) => {
         if (err || !user) return res.status(404).json({ error: 'User not found' });
         res.json(user);
+    });
+});
+
+app.post('/api/auth/logout-all', authenticateToken, (req, res) => {
+    db.run('UPDATE users SET token_version = token_version + 1 WHERE id = ?', [req.user.id], function(err) {
+        if (err) {
+            console.error(err);
+            return res.status(500).json({ error: 'Failed to invalidate sessions.' });
+        }
+        res.json({ success: true, message: 'All sessions logged out.' });
     });
 });
 
@@ -313,6 +407,7 @@ app.post('/api/claim-free-gems', authenticateToken, (req, res) => {
         }
         db.run('UPDATE users SET gems = 20 WHERE id = ?', [req.user.id], (err) => {
             if (err) return res.status(500).json({ error: 'Failed to claim gems' });
+            logBalanceChange(req.user.id, 20 - user.gems, 'FreeGems', null);
             res.json({ message: 'Balance restored to 20 gems', newBalance: 20 });
         });
     });
@@ -418,7 +513,23 @@ app.get('/api/inventory', authenticateToken, async (req, res) => {
                             ? `https://community.akamai.steamstatic.com/economy/image/${desc.icon_url}`
                             : '';
 
-                        return { name, value, image_url: imageUrl, assetid: asset.assetid };
+                        // Extract rarity from Steam description
+                        let rarity = '';
+                        // First try tags
+                        if (desc.tags && Array.isArray(desc.tags)) {
+                            const rarityTag = desc.tags.find(t => 
+                                t.category === 'Rarity' || t.category === 'Rarity Category' || t.category === 'Quality'
+                            );
+                            if (rarityTag) rarity = rarityTag.name.replace(/ Grade$/, '');
+                        }
+                        // Fallback: parse from type field (e.g. "Covert Pistol", "Mil-Spec Grade SMG")
+                        if (!rarity && desc.type) {
+                            const knownRarities = ['Consumer', 'Industrial', 'Mil-Spec', 'Restricted', 'Classified', 'Covert', 'Special', 'Rare', 'Extraordinary', 'Contraband', 'Ancient', 'Legendary', 'Immortal', 'Arcana'];
+                            const match = knownRarities.find(r => desc.type.startsWith(r));
+                            if (match) rarity = match;
+                        }
+
+                        return { name, value, image_url: imageUrl, assetid: asset.assetid, rarity };
                     }).filter(item => item !== null);
 
                     // Sort inventory items by value descending (most to least)
@@ -595,6 +706,8 @@ app.post('/api/deposit/confirm', authenticateToken, validateBody({
                     return res.status(500).json({ error: 'Database error crediting gems' });
                 }
 
+                logBalanceChange(userId, instantPayout, 'Deposit', null);
+
                 // Update deposit statuses to 'accepted_half' and set payout_date to 7 days from now
                 db.run(
                     "UPDATE deposits SET status = 'accepted_half', payout_date = datetime('now', '+7 days') WHERE user_id = ? AND trade_offer_id = ? AND status = 'pending_offer'",
@@ -617,6 +730,8 @@ app.post('/api/deposit/confirm', authenticateToken, validateBody({
                                 message: `Simulated trade accepted. Successfully deposited ${items.length} items. Credited ${instantPayout.toFixed(2)} gems immediately. The remaining ${instantPayout.toFixed(2)} gems will be released in 7 days.`,
                                 instantPayout
                             });
+                            // Track affiliate deposit commission (non-blocking)
+                            trackAffiliateDeposit(userId, totalValue);
                         });
                     }
                 );
@@ -698,6 +813,17 @@ app.post('/api/deposits/mature-test', authenticateToken, (req, res) => {
     });
 });
 
+// Fetches balance history for the authenticated user
+app.get('/api/balance-history', authenticateToken, (req, res) => {
+    db.all('SELECT id, change, new_balance, description, multiplier, timestamp FROM balance_history WHERE user_id = ? ORDER BY id DESC LIMIT 200', [req.user.id], (err, rows) => {
+        if (err) {
+            console.error(err);
+            return res.status(500).json({ error: 'Failed to fetch balance history' });
+        }
+        res.json(rows || []);
+    });
+});
+
 // Fetches items in the bot's inventory available for withdrawal
 app.get('/api/bot-inventory', (req, res) => {
     db.all('SELECT * FROM bot_inventory ORDER BY item_value ASC', (err, rows) => {
@@ -744,6 +870,8 @@ app.post('/api/withdraw', authenticateToken, validateBody({
                         db.run('ROLLBACK');
                         return res.status(500).json({ error: 'Gems deduction failed' });
                     }
+
+                    logBalanceChange(userId, -item.item_value, 'Withdraw', null);
 
                     // Create pending review withdrawal
                     db.run('INSERT INTO withdrawals (user_id, username, item_name, item_value, image_url, status) VALUES (?, ?, ?, ?, ?, ?)',
@@ -851,6 +979,8 @@ app.post('/api/admin/withdrawals/action', authenticateToken, requireAdmin, valid
                         db.run('ROLLBACK');
                         return res.status(500).json({ error: 'Failed to refund user gems' });
                     }
+
+                    logBalanceChange(withdrawal.user_id, withdrawal.item_value, 'Refund', null);
 
                     // Set withdrawal status to declined
                     db.run('UPDATE withdrawals SET status = ? WHERE id = ?', ['declined', withdrawalId], (statusErr) => {
@@ -1074,6 +1204,7 @@ app.post('/api/cases/:id/open', authenticateToken, (req, res) => {
 
                         // Add won value
                         db.run('UPDATE users SET gems = gems + ? WHERE id = ?', [wonItem.value, userId], () => {
+                            logBalanceChange(userId, wonItem.value, 'Cases', caseRow.price > 0 ? wonItem.value / caseRow.price : 0);
                             wonItem.isMythicHit = hitMythic;
                             if (global.broadcastGameResult) {
                                 global.broadcastGameResult(req.user.username, 'Cases', caseRow.price, wonItem.value, caseRow.price > 0 ? wonItem.value / caseRow.price : 0);
@@ -1121,6 +1252,7 @@ const runDoubleGame = () => {
                         multiplier = result === 'green' ? 14 : 2;
                         winnings = bet.amount * multiplier;
                         db.run('UPDATE users SET gems = gems + ? WHERE id = ?', [winnings, bet.userId]);
+                        logBalanceChange(bet.userId, winnings, 'Double', multiplier);
                     }
                     if (global.broadcastGameResult) {
                         global.broadcastGameResult(bet.username, 'Double', bet.amount, winnings, multiplier);
@@ -1182,6 +1314,7 @@ const runCrashGame = () => {
                         if (global.broadcastGameResult) {
                             global.broadcastGameResult(bet.username, 'Crash', bet.amount, 0, 0);
                         }
+                        logBalanceChange(bet.userId, -bet.amount, 'Crash', 0);
                     }
                 });
 
@@ -1259,7 +1392,6 @@ app.post('/api/bet/double', authenticateToken, validateBody({
     });
 });
 
-battleEngine(io);
 runLiveBlackjackLoop(io);
 
 // --- KEEP DIGGING ENDPOINTS ---
@@ -1319,6 +1451,7 @@ app.post('/api/dig/action', authenticateToken, validateBody({
         
         const payout = game.bet * getMultiplier(game.depth);
         db.run('UPDATE users SET gems = gems + ? WHERE id = ?', [payout, req.user.id], () => {
+            logBalanceChange(req.user.id, payout, 'KeepDigging', getMultiplier(game.depth));
             activeDiggingGames.delete(req.user.id);
             if (global.broadcastGameResult) {
                 global.broadcastGameResult(req.user.username, 'KeepDigging', game.bet, payout, getMultiplier(game.depth));
@@ -1342,6 +1475,7 @@ app.post('/api/dig/action', authenticateToken, validateBody({
             if (global.broadcastGameResult) {
                 global.broadcastGameResult(req.user.username, 'KeepDigging', game.bet, 0, 0);
             }
+            logBalanceChange(req.user.id, -game.bet, 'KeepDigging', 0);
             res.json({ status: 'exploded', depth: game.depth });
         }
     } else {
@@ -1485,6 +1619,7 @@ app.post('/api/chicken/pick', authenticateToken, validateBody({
         if (global.broadcastGameResult) {
             global.broadcastGameResult(req.user.username, 'ChickenRoad', game.bet, 0, 0);
         }
+        logBalanceChange(req.user.id, -game.bet, 'ChickenRoad', 0);
         return res.json({
             status: 'dead',
             hitCar: true,
@@ -1510,6 +1645,7 @@ app.post('/api/chicken/pick', authenticateToken, validateBody({
     if (game.currentRow >= 10) {
         const payout = game.bet * currentMultiplier;
         db.run('UPDATE users SET gems = gems + ? WHERE id = ?', [payout, req.user.id]);
+        logBalanceChange(req.user.id, payout, 'ChickenRoad', currentMultiplier);
         activeChickenGames.delete(req.user.id);
         if (global.broadcastGameResult) {
             global.broadcastGameResult(req.user.username, 'ChickenRoad', game.bet, payout, currentMultiplier);
@@ -1542,6 +1678,7 @@ app.post('/api/chicken/cashout', authenticateToken, (req, res) => {
     const payout = game.bet * currentMultiplier;
 
     db.run('UPDATE users SET gems = gems + ? WHERE id = ?', [payout, req.user.id]);
+    logBalanceChange(req.user.id, payout, 'ChickenRoad', currentMultiplier);
     activeChickenGames.delete(req.user.id);
     if (global.broadcastGameResult) {
         global.broadcastGameResult(req.user.username, 'ChickenRoad', game.bet, payout, currentMultiplier);
@@ -1666,8 +1803,10 @@ app.post('/api/upgrader/spin', authenticateToken, validateBody({
                     
                     // Pay out item value
                     db.run('UPDATE users SET gems = gems + ? WHERE id = ?', [item.price, req.user.id]);
+                    logBalanceChange(req.user.id, item.price, 'Upgrader', item.price / betAmount);
                 } else {
                     // Land outside the win zone
+                    logBalanceChange(req.user.id, -betAmount, 'Upgrader', 0);
                     const margin = Math.min(5, (360 - winZoneDeg) * 0.05);
                     landingAngle = winZoneDeg + margin + Math.random() * (360 - winZoneDeg - 2 * margin);
                 }
@@ -1723,6 +1862,7 @@ app.post('/api/cashout/crash', authenticateToken, (req, res) => {
 
     db.run('UPDATE users SET gems = gems + ? WHERE id = ?', [winnings, req.user.id], (err) => {
         if (err) return res.status(500).json({ error: 'Server error' });
+        logBalanceChange(req.user.id, winnings, 'Crash', crashGameState.multiplier);
         if (global.broadcastGameResult) {
             global.broadcastGameResult(bet.username, 'Crash', bet.amount, winnings, crashGameState.multiplier);
         }
@@ -1807,6 +1947,7 @@ app.post('/api/mines/click', authenticateToken, validateBody({
         if (global.broadcastGameResult) {
             global.broadcastGameResult(req.user.username, 'Mines', game.betAmount, 0, 0);
         }
+        logBalanceChange(req.user.id, -game.betAmount, 'Mines', 0);
         return res.json({ status: 'busted', tile: 'mine', board: game.board });
     }
     
@@ -1817,6 +1958,7 @@ app.post('/api/mines/click', authenticateToken, validateBody({
     if (game.clicks === 25 - game.minesCount) {
         const winnings = game.betAmount * multiplier;
         db.run('UPDATE users SET gems = gems + ? WHERE id = ?', [winnings, req.user.id], (err) => {
+            logBalanceChange(req.user.id, winnings, 'Mines', multiplier);
             activeMinesGames.delete(gameId);
             if (global.broadcastGameResult) {
                 global.broadcastGameResult(req.user.username, 'Mines', game.betAmount, winnings, multiplier);
@@ -1842,6 +1984,7 @@ app.post('/api/mines/cashout', authenticateToken, validateBody({
     
     db.run('UPDATE users SET gems = gems + ? WHERE id = ?', [winnings, req.user.id], (err) => {
         if (err) return res.status(500).json({ error: 'Server error' });
+        logBalanceChange(req.user.id, winnings, 'Mines', multiplier);
         activeMinesGames.delete(gameId);
         if (global.broadcastGameResult) {
             global.broadcastGameResult(req.user.username, 'Mines', game.betAmount, winnings, multiplier);
@@ -1906,7 +2049,11 @@ app.post('/api/blackjack/normal/start', authenticateToken, validateBody({
             }
             
             if (payout > 0 || state === 'lose') {
-                if (payout > 0) db.run('UPDATE users SET gems = gems + ? WHERE id = ?', [payout, req.user.id]);
+                if (payout > 0) {
+                db.run('UPDATE users SET gems = gems + ? WHERE id = ?', [payout, req.user.id]);
+                const bjMultiplier = betAmount > 0 ? payout / betAmount : 0;
+                logBalanceChange(req.user.id, payout, 'Blackjack', bjMultiplier);
+            }
                 if (global.broadcastGameResult) {
                     global.broadcastGameResult(req.user.username, 'Blackjack', betAmount, payout, betAmount > 0 ? payout / betAmount : 0);
                 }
@@ -1989,6 +2136,7 @@ app.post('/api/blackjack/normal/action', authenticateToken, validateBody({
                 const result = resolveDealer();
                 if (result.payout > 0) {
                     db.run('UPDATE users SET gems = gems + ? WHERE id = ?', [result.payout, req.user.id]);
+                    logBalanceChange(req.user.id, result.payout, 'Blackjack', result.payout / (betAmount * 2));
                 }
                 activeNormalBj.delete(gameId);
                 if (global.broadcastGameResult) {
@@ -2017,6 +2165,7 @@ app.post('/api/blackjack/normal/action', authenticateToken, validateBody({
         const result = resolveDealer();
         if (result.payout > 0) {
             db.run('UPDATE users SET gems = gems + ? WHERE id = ?', [result.payout, req.user.id]);
+            logBalanceChange(req.user.id, result.payout, 'Blackjack', betAmount > 0 ? result.payout / betAmount : 0);
         }
         activeNormalBj.delete(gameId);
         if (global.broadcastGameResult) {
@@ -2182,6 +2331,7 @@ function runLiveBlackjackLoop(io) {
                 
                 if (b.payout > 0) {
                     db.run('UPDATE users SET gems = gems + ? WHERE id = ?', [b.payout, uid]);
+                    logBalanceChange(uid, b.payout, 'LiveBlackjack', b.amount > 0 ? b.payout / b.amount : 0);
                 }
 
                 if (global.broadcastGameResult) {
@@ -2303,6 +2453,7 @@ app.post('/api/plinko/drop', authenticateToken, validateBody({
         
         db.run('UPDATE users SET gems = gems - ? + ? WHERE id = ?', [amount, payout, req.user.id], (err) => {
             if (err) return res.status(500).json({ error: 'Database error' });
+            logBalanceChange(req.user.id, payout - amount, 'Plinko', multiplier);
             wagerGems(req.user.id, amount);
             if (global.broadcastGameResult) {
                 global.broadcastGameResult(req.user.username, 'Plinko', amount, payout, multiplier);
@@ -2476,6 +2627,7 @@ app.post('/api/slots/spin', authenticateToken, validateBody({
         if (totalPayout > 0) {
             db.run('UPDATE users SET gems = gems + ? WHERE id = ?', [totalPayout, req.user.id], (err) => {
                 if (err) return res.status(500).json({ error: 'Database error' });
+                logBalanceChange(req.user.id, totalPayout, 'Slots', displayMultiplier);
                 res.json({ grid: gridData, wins, totalPayout, scatterCount, awardedFreeSpins, freeSpinsRemaining, freeSpinMultiplier: currentMultiplier, isFreeSpinMode });
             });
         } else {
@@ -2685,6 +2837,7 @@ const settleKalshiBets = async () => {
                                     );
                                     if (isWin || isRefund) {
                                         db.run("UPDATE users SET gems = gems + ? WHERE id = ?", [payout, bet.user_id]);
+                                        logBalanceChange(bet.user_id, payout, 'Kalshi', null);
                                     }
                                     db.run("COMMIT", () => {
                                         console.log(`Settled bet ${bet.id} for user ${bet.username} as ${betStatus}. Payout: ${payout} Gems.`);
@@ -2846,6 +2999,7 @@ app.post('/api/kalshi/sell', authenticateToken, validateBody({
             db.serialize(() => {
                 db.run("BEGIN TRANSACTION");
                 db.run("UPDATE users SET gems = gems + ? WHERE id = ?", [payoutAmount, req.user.id]);
+                logBalanceChange(req.user.id, payoutAmount, 'Kalshi', null);
                 db.run("UPDATE kalshi_bets SET status = 'cashed_out', cashout_price = ?, payout_amount = ?, settled_at = ? WHERE id = ?",
                     [sellPrice, payoutAmount, Date.now(), betId]
                 );
@@ -2873,6 +3027,472 @@ app.post('/api/kalshi/sell', authenticateToken, validateBody({
 app.use((err, req, res, next) => {
     console.error('Unhandled Server Error:', err);
     res.status(500).json({ error: 'Internal Server Error' });
+});
+
+// --- DAILY CASE & REFERRAL ENDPOINTS ---
+
+// Apply a referral code (for new users who didn't come via a referral link)
+app.post('/api/user/referral-code', authenticateToken, validateBody({
+    code: val => typeof val === 'string' && val.trim().length >= 1
+}), async (req, res) => {
+    try {
+        const result = await applyReferralCode(req.user.id, req.body.code.trim().toLowerCase());
+        res.json({ success: true, message: `Welcome! You received ${result.cases} welcome cases.`, cases: result.cases });
+    } catch (err) {
+        res.status(400).json({ error: typeof err === 'string' ? err : 'Failed to apply referral code' });
+    }
+});
+
+// Skip referral (use "molotov" default code for 2 welcome cases)
+app.post('/api/user/skip-referral', authenticateToken, (req, res) => {
+    db.get('SELECT referred_by, onboarding_done FROM users WHERE id = ?', [req.user.id], (err, user) => {
+        if (err) return res.status(500).json({ error: 'Database error' });
+        if (!user) return res.status(404).json({ error: 'User not found' });
+        if (user.referred_by) return res.status(400).json({ error: 'You already used a referral code' });
+        if (user.onboarding_done) return res.status(400).json({ error: 'Onboarding already completed' });
+        db.run('UPDATE users SET welcome_cases = 2, onboarding_done = 1 WHERE id = ?', [req.user.id], (err) => {
+            if (err) return res.status(500).json({ error: 'Database error' });
+            res.json({ success: true, message: 'You received 2 welcome cases.', cases: 2 });
+        });
+    });
+});
+
+// Claim/choose an affiliate code for your own profile
+app.post('/api/user/claim-affiliate-code', authenticateToken, validateBody({
+    code: val => typeof val === 'string' && /^[a-zA-Z0-9_-]{3,20}$/.test(val)
+}), (req, res) => {
+    const code = req.body.code.trim().toLowerCase();
+    db.get('SELECT affiliate_code FROM users WHERE id = ?', [req.user.id], (err, user) => {
+        if (err) return res.status(500).json({ error: 'Database error' });
+        if (!user) return res.status(404).json({ error: 'User not found' });
+        if (user.affiliate_code) return res.status(400).json({ error: 'You already have an affiliate code' });
+        db.get('SELECT id FROM users WHERE affiliate_code = ?', [code], (err, existing) => {
+            if (err) return res.status(500).json({ error: 'Database error' });
+            if (existing) return res.status(400).json({ error: 'This code is already taken' });
+            db.run('UPDATE users SET affiliate_code = ? WHERE id = ?', [code, req.user.id], (err) => {
+                if (err) return res.status(500).json({ error: 'Failed to save code' });
+                res.json({ success: true, code });
+            });
+        });
+    });
+});
+
+// Get daily case page status (requirements, can claim, welcome cases)
+app.get('/api/daily-case/status', authenticateToken, (req, res) => {
+    db.get('SELECT steamid, username, last_daily_case, welcome_cases, daily_case_streak FROM users WHERE id = ?', [req.user.id], (err, user) => {
+        if (err || !user) return res.status(404).json({ error: 'User not found' });
+        
+        let canClaimDaily = false;
+        let nextClaimTime = null;
+        if (user.last_daily_case) {
+            const last = new Date(user.last_daily_case + 'Z');
+            const now = new Date();
+            const nextMidnight = new Date(now);
+            nextMidnight.setUTCHours(24, 0, 0, 0);
+            if (now >= nextMidnight) {
+                canClaimDaily = true;
+                nextClaimTime = null;
+            } else {
+                canClaimDaily = false;
+                nextClaimTime = nextMidnight.toISOString();
+            }
+        } else {
+            canClaimDaily = true;
+        }
+        
+        const pfpExists = fs.existsSync(pfpPath);
+        
+        res.json({
+            steamid: user.steamid,
+            username: user.username,
+            canClaimDaily,
+            nextClaimTime,
+            welcomeCases: user.welcome_cases || 0,
+            dailyCaseStreak: user.daily_case_streak || 0,
+            hasPfpImage: pfpExists
+        });
+    });
+});
+
+// Check daily case requirements (Steam username, PFP, CS2 ownership)
+app.post('/api/daily-case/check-requirements', authenticateToken, async (req, res) => {
+    try {
+        const userId = req.user.id;
+        
+        db.get('SELECT steamid, username FROM users WHERE id = ?', [userId], async (err, user) => {
+            if (err || !user) return res.status(404).json({ error: 'User not found' });
+            
+            const steamid = user.steamid;
+            const checks = { username: false, pfp: false, ownsCs2: false };
+            
+            // 1. Check Steam username contains "csmolly.bet" (case-insensitive)
+            try {
+                const profileRes = await fetch(`https://steamcommunity.com/profiles/${steamid}/?xml=1`);
+                if (profileRes.ok) {
+                    const xml = await profileRes.text();
+                    const steamIDMatch = xml.match(/<steamID><!\[CDATA\[(.*?)\]\]><\/steamID>/) || xml.match(/<steamID>(.*?)<\/steamID>/);
+                    const currentName = steamIDMatch ? steamIDMatch[1].toLowerCase() : '';
+                    checks.username = currentName.includes('csmolly.bet');
+                }
+            } catch (e) {
+                console.error('[DailyCase] Error checking Steam username:', e.message);
+            }
+            
+            // 2. Check PFP matches required image
+            try {
+                const avatarRes = await fetch(`https://steamcommunity.com/profiles/${steamid}/?xml=1`);
+                if (avatarRes.ok) {
+                    const xml = await avatarRes.text();
+                    const avatarMatch = xml.match(/<avatarIcon><!\[CDATA\[(.*?)\]\]><\/avatarIcon>/) || xml.match(/<avatarIcon>(.*?)<\/avatarIcon>/);
+                    if (avatarMatch) {
+                        const avatarUrl = avatarMatch[1];
+                        const imgRes = await fetch(avatarUrl);
+                        if (imgRes.ok) {
+                            const imgBuffer = Buffer.from(await imgRes.arrayBuffer());
+                            const resized = await sharp(imgBuffer).resize(32, 32).grayscale().raw().toBuffer();
+                            const avatarHash = require('crypto').createHash('sha256').update(resized).digest('hex');
+                            checks.pfp = requiredPfpHash !== null && avatarHash === requiredPfpHash;
+                        }
+                    }
+                }
+            } catch (e) {
+                console.error('[DailyCase] Error checking PFP:', e.message);
+            }
+            
+            // 3. Check CS2 ownership by trying to access inventory
+            try {
+                const invRes = await fetch(`https://steamcommunity.com/inventory/${steamid}/730/2`, {
+                    headers: { 'User-Agent': 'Mozilla/5.0' }
+                });
+                // 200 or 403 means the user has CS2 (403 = private inventory)
+                checks.ownsCs2 = invRes.status === 200 || invRes.status === 403;
+            } catch (e) {
+                console.error('[DailyCase] Error checking CS2 ownership:', e.message);
+            }
+            
+            const allMet = checks.username && checks.pfp && checks.ownsCs2;
+            
+            res.json({ checks, allMet });
+        });
+    } catch (e) {
+        res.status(500).json({ error: 'Failed to check requirements', details: e.message });
+    }
+});
+
+// Claim daily case (free) — re-checks requirements
+app.post('/api/daily-case/claim', authenticateToken, async (req, res) => {
+    try {
+        const userId = req.user.id;
+        
+        db.get('SELECT * FROM users WHERE id = ?', [userId], async (err, user) => {
+            if (err || !user) return res.status(404).json({ error: 'User not found' });
+            
+            // Check if they have welcome cases
+            const usingWelcome = (user.welcome_cases || 0) > 0;
+            
+            if (!usingWelcome) {
+                // Check if daily case is available
+                if (user.last_daily_case) {
+                    const last = new Date(user.last_daily_case + 'Z');
+                    const now = new Date();
+                    const nextMidnight = new Date(now);
+                    nextMidnight.setUTCHours(24, 0, 0, 0);
+                    if (now < nextMidnight) {
+                        return res.status(400).json({ error: 'Daily case already claimed today. Come back tomorrow!' });
+                    }
+                }
+            }
+            
+            // Re-check requirements (skip for welcome cases)
+            if (!usingWelcome) {
+                const steamid = user.steamid;
+                let allMet = false;
+                
+                try {
+                    const profileRes = await fetch(`https://steamcommunity.com/profiles/${steamid}/?xml=1`);
+                    if (profileRes.ok) {
+                        const xml = await profileRes.text();
+                        const steamIDMatch = xml.match(/<steamID><!\[CDATA\[(.*?)\]\]><\/steamID>/) || xml.match(/<steamID>(.*?)<\/steamID>/);
+                        const currentName = steamIDMatch ? steamIDMatch[1].toLowerCase() : '';
+                        const nameOk = currentName.includes('csmolly.bet');
+                        
+                        const avatarMatch = xml.match(/<avatarIcon><!\[CDATA\[(.*?)\]\]><\/avatarIcon>/) || xml.match(/<avatarIcon>(.*?)<\/avatarIcon>/);
+                        let pfpOk = false;
+                        if (avatarMatch && requiredPfpHash) {
+                            const imgRes = await fetch(avatarMatch[1]);
+                            if (imgRes.ok) {
+                                const imgBuffer = Buffer.from(await imgRes.arrayBuffer());
+                                const resized = await sharp(imgBuffer).resize(32, 32).grayscale().raw().toBuffer();
+                                const avatarHash = require('crypto').createHash('sha256').update(resized).digest('hex');
+                                pfpOk = avatarHash === requiredPfpHash;
+                            }
+                        }
+                        
+                        const invRes = await fetch(`https://steamcommunity.com/inventory/${steamid}/730/2`, {
+                            headers: { 'User-Agent': 'Mozilla/5.0' }
+                        });
+                        const ownsCs2 = invRes.status === 200 || invRes.status === 403;
+                        
+                        allMet = nameOk && pfpOk && ownsCs2;
+                    }
+                } catch (e) {
+                    console.error('[DailyCase] Error checking requirements on claim:', e.message);
+                }
+                
+                if (!allMet) {
+                    return res.status(400).json({ error: 'Requirements not met. Please check your Steam username (must contain "csmolly.bet"), profile picture, and CS2 ownership.' });
+                }
+            }
+            
+            // Find the "Daily Case" created by admin (owner_id = 1 or any case named "Daily Case")
+            // If none exists, use any available case
+            db.get('SELECT * FROM cases WHERE LOWER(name) = ? ORDER BY id DESC LIMIT 1', ['daily case'], (err, dailyCase) => {
+                if (!dailyCase) {
+                    // Fallback: use first available case
+                    db.get('SELECT * FROM cases ORDER BY id ASC LIMIT 1', [], (err, fallbackCase) => {
+                        if (!fallbackCase) {
+                            return res.status(400).json({ error: 'No cases available. Create a case first.' });
+                        }
+                        openDailyCase(fallbackCase);
+                    });
+                    return;
+                }
+                openDailyCase(dailyCase);
+            });
+            
+            function openDailyCase(caseRow) {
+                db.all('SELECT * FROM items WHERE case_id = ?', [caseRow.id], (err, items) => {
+                    if (err || !items || items.length === 0) {
+                        return res.status(500).json({ error: 'Case has no items' });
+                    }
+                    
+                    // Roll for winning item
+                    let roll = Math.random() * 100;
+                    let wonItem = null;
+                    let cumProb = 0;
+                    for (const item of items) {
+                        cumProb += item.odds;
+                        if (roll <= cumProb) { wonItem = item; break; }
+                    }
+                    if (!wonItem) wonItem = items[items.length - 1];
+                    
+                    // Update user balance
+                    const rewardValue = wonItem.value;
+                    
+                    db.serialize(() => {
+                        db.run('BEGIN TRANSACTION');
+                        db.run('UPDATE users SET gems = gems + ?, last_daily_case = datetime(\'now\'), daily_case_streak = CASE WHEN ? = 1 THEN daily_case_streak + 1 ELSE daily_case_streak END, welcome_cases = CASE WHEN welcome_cases > 0 THEN welcome_cases - 1 ELSE welcome_cases END WHERE id = ?',
+                            [rewardValue, usingWelcome ? 0 : 1, userId]);
+                        
+                        db.run('UPDATE users SET gems = gems + ? WHERE id = ?', [caseRow.price * 0.01, caseRow.owner_id]);
+                        
+                        logBalanceChange(userId, rewardValue, usingWelcome ? 'WelcomeCase' : 'DailyCase', null);
+
+                        db.run('COMMIT', (commitErr) => {
+                            if (commitErr) return res.status(500).json({ error: 'Transaction failed' });
+                            res.json({
+                                success: true,
+                                wonItem: { name: wonItem.name, value: wonItem.value, image_url: wonItem.image_url },
+                                items: items.map(i => ({ name: i.name, value: i.value, image_url: i.image_url, odds: i.odds })),
+                                caseName: caseRow.name,
+                                isWelcome: usingWelcome
+                            });
+                        });
+                    });
+                });
+            }
+        });
+    } catch (e) {
+        res.status(500).json({ error: 'Failed to claim daily case', details: e.message });
+    }
+});
+
+// Get affiliate stats
+app.get('/api/affiliate/stats', authenticateToken, (req, res) => {
+    const userId = req.user.id;
+    
+    db.get('SELECT affiliate_code, affiliate_earnings FROM users WHERE id = ?', [userId], (err, user) => {
+        if (err || !user) return res.status(404).json({ error: 'User not found' });
+        
+        db.get('SELECT COUNT(*) as total FROM users WHERE referred_by = ?', [userId], (err, referrals) => {
+            db.all('SELECT at.*, u.username as referred_username FROM affiliate_transactions at JOIN users u ON at.referred_user_id = u.id WHERE at.affiliate_id = ? ORDER BY at.created_at DESC LIMIT 50', [userId], (err, transactions) => {
+                if (err) { console.error(err); return res.status(500).json({ error: 'Database error' }); }
+                
+                const totalDeposits = transactions.filter(t => t.type === 'deposit').reduce((s, t) => s + t.amount, 0);
+                const totalWagerComm = transactions.filter(t => t.type === 'wager').reduce((s, t) => s + t.commission, 0);
+                const totalDepositComm = transactions.filter(t => t.type === 'deposit').reduce((s, t) => s + t.commission, 0);
+                
+                res.json({
+                    affiliateCode: user.affiliate_code,
+                    affiliateLink: `/?ref=${user.affiliate_code}`,
+                    totalEarnings: user.affiliate_earnings || 0,
+                    totalReferrals: referrals ? referrals.total : 0,
+                    totalDeposits,
+                    totalWagerComm,
+                    totalDepositComm,
+                    transactions: transactions || []
+                });
+            });
+        });
+    });
+});
+
+// ============ SUPPORT TICKETS ============
+
+// Create a new support ticket
+app.post('/api/support/tickets', authenticateToken, validateBody({
+    subject: val => typeof val === 'string' && val.trim().length >= 1 && val.trim().length <= 200,
+    message: val => typeof val === 'string' && val.trim().length >= 1
+}), (req, res) => {
+    const { subject, message } = req.body;
+    const userId = req.user.id;
+    
+    db.run('INSERT INTO support_tickets (user_id, subject) VALUES (?, ?)', [userId, subject.trim()], function(err) {
+        if (err) return res.status(500).json({ error: 'Failed to create ticket' });
+        const ticketId = this.lastID;
+        db.run('INSERT INTO ticket_messages (ticket_id, user_id, message) VALUES (?, ?, ?)',
+            [ticketId, userId, message.trim()], (err) => {
+            if (err) return res.status(500).json({ error: 'Failed to save message' });
+            res.json({ success: true, ticketId });
+        });
+    });
+});
+
+// List tickets for the authenticated user
+app.get('/api/support/tickets', authenticateToken, (req, res) => {
+    db.all(`SELECT t.*, 
+        (SELECT message FROM ticket_messages WHERE ticket_id = t.id ORDER BY created_at DESC LIMIT 1) as last_message,
+        (SELECT created_at FROM ticket_messages WHERE ticket_id = t.id ORDER BY created_at DESC LIMIT 1) as last_message_at
+        FROM support_tickets t WHERE t.user_id = ? ORDER BY t.updated_at DESC`, [req.user.id], (err, tickets) => {
+        if (err) return res.status(500).json({ error: 'Failed to fetch tickets' });
+        res.json(tickets || []);
+    });
+});
+
+// Get a single ticket with all messages
+app.get('/api/support/tickets/:id', authenticateToken, (req, res) => {
+    const ticketId = req.params.id;
+    db.get('SELECT * FROM support_tickets WHERE id = ?', [ticketId], (err, ticket) => {
+        if (err || !ticket) return res.status(404).json({ error: 'Ticket not found' });
+        if (ticket.user_id !== req.user.id && req.user.role !== 'admin') {
+            return res.status(403).json({ error: 'Access denied' });
+        }
+        db.all('SELECT tm.*, u.username FROM ticket_messages tm LEFT JOIN users u ON tm.user_id = u.id WHERE tm.ticket_id = ? ORDER BY tm.created_at ASC', [ticketId], (err, messages) => {
+            if (err) return res.status(500).json({ error: 'Failed to fetch messages' });
+            res.json({ ...ticket, messages: messages || [] });
+        });
+    });
+});
+
+// Add a message to a ticket (user)
+app.post('/api/support/tickets/:id/messages', authenticateToken, validateBody({
+    message: val => typeof val === 'string' && val.trim().length >= 1
+}), (req, res) => {
+    const ticketId = req.params.id;
+    const { message } = req.body;
+    
+    db.get('SELECT * FROM support_tickets WHERE id = ?', [ticketId], (err, ticket) => {
+        if (err || !ticket) return res.status(404).json({ error: 'Ticket not found' });
+        if (ticket.user_id !== req.user.id) return res.status(403).json({ error: 'Access denied' });
+        if (ticket.status === 'closed') return res.status(400).json({ error: 'Ticket is closed' });
+        
+        db.run('INSERT INTO ticket_messages (ticket_id, user_id, message) VALUES (?, ?, ?)',
+            [ticketId, req.user.id, message.trim()], (err) => {
+            if (err) return res.status(500).json({ error: 'Failed to save message' });
+            db.run('UPDATE support_tickets SET updated_at = CURRENT_TIMESTAMP WHERE id = ?', [ticketId]);
+            res.json({ success: true });
+        });
+    });
+});
+
+// Admin: List all tickets
+app.get('/api/admin/support/tickets', authenticateToken, requireAdmin, (req, res) => {
+    const status = req.query.status || 'open';
+    db.all(`SELECT t.*, u.username,
+        (SELECT message FROM ticket_messages WHERE ticket_id = t.id ORDER BY created_at DESC LIMIT 1) as last_message,
+        (SELECT created_at FROM ticket_messages WHERE ticket_id = t.id ORDER BY created_at DESC LIMIT 1) as last_message_at
+        FROM support_tickets t JOIN users u ON t.user_id = u.id
+        WHERE t.status = ? ORDER BY t.updated_at DESC`, [status], (err, tickets) => {
+        if (err) return res.status(500).json({ error: 'Failed to fetch tickets' });
+        res.json(tickets || []);
+    });
+});
+
+// Admin: Close a ticket
+app.post('/api/admin/support/tickets/:id/close', authenticateToken, requireAdmin, (req, res) => {
+    db.run('UPDATE support_tickets SET status = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?', ['closed', req.params.id], (err) => {
+        if (err) return res.status(500).json({ error: 'Failed to close ticket' });
+        res.json({ success: true });
+    });
+});
+
+// Admin: Reply to a ticket
+app.post('/api/admin/support/tickets/:id/messages', authenticateToken, requireAdmin, validateBody({
+    message: val => typeof val === 'string' && val.trim().length >= 1
+}), (req, res) => {
+    const ticketId = req.params.id;
+    db.run('INSERT INTO ticket_messages (ticket_id, user_id, message, is_admin) VALUES (?, ?, ?, 1)',
+        [ticketId, req.user.id, req.body.message.trim()], (err) => {
+        if (err) return res.status(500).json({ error: 'Failed to save reply' });
+        db.run('UPDATE support_tickets SET status = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?', ['open', ticketId]);
+        res.json({ success: true });
+    });
+});
+
+// Public: List transfer files (no auth needed)
+app.get('/api/transfers', (req, res) => {
+    fs.readdir(transfersDir, (err, files) => {
+        if (err) return res.status(500).json({ error: 'Failed to list transfers' });
+        const fileInfos = files.map(file => {
+            const stat = fs.statSync(path.join(transfersDir, file));
+            return {
+                name: file,
+                size: stat.size,
+                modified: stat.mtime,
+                url: '/transfers/' + file
+            };
+        }).sort((a, b) => b.modified - a.modified);
+        res.json(fileInfos);
+    });
+});
+
+// Admin: List transfer files
+app.get('/api/admin/transfers', authenticateToken, requireAdmin, (req, res) => {
+    fs.readdir(transfersDir, (err, files) => {
+        if (err) return res.status(500).json({ error: 'Failed to list transfers' });
+        const fileInfos = files.map(file => {
+            const stat = fs.statSync(path.join(transfersDir, file));
+            return {
+                name: file,
+                size: stat.size,
+                modified: stat.mtime,
+                url: '/transfers/' + file
+            };
+        }).sort((a, b) => b.modified - a.modified);
+        res.json(fileInfos);
+    });
+});
+
+// Admin: Upload transfer file
+app.post('/api/admin/upload-transfer', authenticateToken, requireAdmin, upload.single('file'), (req, res) => {
+    if (!req.file) return res.status(400).json({ error: 'No file uploaded' });
+    const originalName = req.file.originalname;
+    const filepath = path.join(transfersDir, originalName);
+    fs.writeFile(filepath, req.file.buffer, (err) => {
+        if (err) return res.status(500).json({ error: 'Failed to save file' });
+        res.json({ success: true, name: originalName, url: '/transfers/' + originalName });
+    });
+});
+
+// Admin: Delete transfer file
+app.delete('/api/admin/transfers/:filename', authenticateToken, requireAdmin, (req, res) => {
+    const filepath = path.join(transfersDir, req.params.filename);
+    // Prevent directory traversal
+    if (!filepath.startsWith(transfersDir)) return res.status(400).json({ error: 'Invalid filename' });
+    fs.unlink(filepath, (err) => {
+        if (err) return res.status(500).json({ error: 'Failed to delete file' });
+        res.json({ success: true });
+    });
 });
 
 const PORT = 3001;

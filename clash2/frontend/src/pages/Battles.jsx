@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import axios from 'axios';
 import { useAuth } from '../contexts/AuthContext';
 import { useNavigate } from 'react-router-dom';
@@ -15,6 +15,7 @@ export default function Battles() {
     const [isMythicSpin, setIsMythicSpin] = useState(false);
     const [isCreating, setIsCreating] = useState(false);
     const [activeBattles, setActiveBattles] = useState([]);
+    const createCooldownRef = useRef(false);
 
     useEffect(() => {
         // Fetch cases to select for battle
@@ -46,11 +47,12 @@ export default function Battles() {
     const totalCost = cart.reduce((acc, c) => acc + c.price, 0);
 
     const handleCreateBattle = () => {
-        if (isCreating) return;
+        if (createCooldownRef.current) return;
         if (!user) return alert('Please login first');
         if (cart.length === 0) return alert('Select at least one case to battle');
         if (user.gems < totalCost) return alert('Insufficient gems');
 
+        createCooldownRef.current = true;
         setIsCreating(true);
         const socket = io(undefined, {
             auth: { token: localStorage.getItem('token') }
@@ -63,7 +65,10 @@ export default function Battles() {
             ffaPlayers: battleMode === 'ffa' ? ffaPlayers : undefined, 
             caseIds: cart.map(c => c.id) 
         }, (res) => {
-            setIsCreating(false);
+            setTimeout(() => {
+                createCooldownRef.current = false;
+                setIsCreating(false);
+            }, 5000);
             if (res.error) {
                 alert(res.error);
                 socket.disconnect();

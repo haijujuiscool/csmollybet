@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { Link } from 'react-router-dom';
-import { Gem, LogOut, Menu, User, WalletCards } from 'lucide-react';
+import { Gem, LogOut, Menu, Settings, User, WalletCards, Gift } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import DepositWithdrawModal from './DepositWithdrawModal';
 
@@ -10,14 +10,29 @@ import minesIcon from '../assets/mines.png';
 import battlesIcon from '../assets/battles.png';
 import casesIcon from '../assets/cases.png';
 import upgraderIcon from '../assets/upgrader.png';
+import mollyFlames from '../assets/molly_flames.png';
+
+const dropdownBase = {
+    position: 'absolute',
+    right: 0,
+    top: '100%',
+    background: 'rgba(0,0,0,0.95)',
+    border: '1px solid #444',
+    borderRadius: '6px',
+    padding: '8px',
+    zIndex: 1000,
+    minWidth: '180px'
+};
 
 export default function Navbar({ onToggleSidebar }) {
     const { user, logout } = useAuth();
     const [tradeModal, setTradeModal] = useState(null);
     const [gamesOpen, setGamesOpen] = useState(false);
     const [userMenuOpen, setUserMenuOpen] = useState(false);
+    const [profileOpen, setProfileOpen] = useState(false);
     const dropdownRef = useRef(null);
     const userMenuRef = useRef(null);
+    const profileRef = useRef(null);
 
     useEffect(() => {
         const handleOutsideClick = (e) => {
@@ -26,6 +41,9 @@ export default function Navbar({ onToggleSidebar }) {
             }
             if (userMenuRef.current && !userMenuRef.current.contains(e.target)) {
                 setUserMenuOpen(false);
+            }
+            if (profileRef.current && !profileRef.current.contains(e.target)) {
+                setProfileOpen(false);
             }
         };
         document.addEventListener('mousedown', handleOutsideClick);
@@ -65,8 +83,12 @@ export default function Navbar({ onToggleSidebar }) {
                         WebkitBackgroundClip: 'text',
                         WebkitTextFillColor: 'transparent',
                         marginRight: '20px',
-                        textDecoration: 'none'
+                        textDecoration: 'none',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '8px'
                     }}>
+                        <img src={mollyFlames} alt="" style={{ height: '28px', width: 'auto' }} />
                         CSMOLLY
                     </Link>
                     <div ref={dropdownRef} className="games-dropdown-wrapper" style={{ position: 'relative' }}>
@@ -121,6 +143,9 @@ export default function Navbar({ onToggleSidebar }) {
                 </div>
 
                 <div ref={userMenuRef} className="navbar-mobile-right">
+                    <Link to="/daily-case" className="mobile-daily-btn" aria-label="Daily case" style={{ textDecoration: 'none' }}>
+                        <Gift size={20} />
+                    </Link>
                     <button
                         type="button"
                         className="btn-secondary navbar-action mobile-user-btn"
@@ -131,10 +156,10 @@ export default function Navbar({ onToggleSidebar }) {
                             <img
                                 src={user.avatar}
                                 alt=""
-                                style={{ width: '24px', height: '24px', borderRadius: '50%', objectFit: 'cover' }}
+                                style={{ width: '28px', height: '28px', borderRadius: '50%', objectFit: 'cover' }}
                             />
                         ) : (
-                            <User size={20} />
+                            <User size={24} />
                         )}
                     </button>
                     {userMenuOpen && (
@@ -167,6 +192,25 @@ export default function Navbar({ onToggleSidebar }) {
                                         <WalletCards size={16} />
                                         Deposit
                                     </button>
+                                    <Link
+                                        to="/profile"
+                                        className="dropdown-item"
+                                        style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '8px 12px', color: '#fff', textDecoration: 'none', borderRadius: '4px', fontSize: '14px' }}
+                                        onClick={() => setUserMenuOpen(false)}
+                                    >
+                                        <User size={16} />
+                                        Profile
+                                    </Link>
+                                    <Link
+                                        to="/profile"
+                                        className="dropdown-item"
+                                        style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '8px 12px', color: '#fff', textDecoration: 'none', borderRadius: '4px', fontSize: '14px' }}
+                                        onClick={() => setUserMenuOpen(false)}
+                                    >
+                                        <Settings size={16} />
+                                        Settings
+                                    </Link>
+                                    <div style={{ borderTop: '1px solid #333', margin: '4px 0' }} />
                                     <button
                                         className="dropdown-item"
                                         style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '8px 12px', color: '#fff', background: 'none', border: 'none', borderRadius: '4px', width: '100%', textAlign: 'left', cursor: 'pointer', fontSize: '14px' }}
@@ -202,23 +246,69 @@ export default function Navbar({ onToggleSidebar }) {
                 <div className="navbar-right">
                     {user ? (
                         <>
+                            <Link
+                                to="/daily-case"
+                                className="btn-secondary navbar-action"
+                                style={{ display: 'flex', alignItems: 'center', gap: '6px', textDecoration: 'none', borderRadius: '4px', height: '40px', boxSizing: 'border-box' }}
+                            >
+                                <Gift size={16} />
+                                <span className="navbar-action-label">Daily</span>
+                            </Link>
                             <button
                                 type="button"
                                 className="btn-primary navbar-action"
                                 onClick={() => setTradeModal('deposit')}
+                                style={{ height: '40px', boxSizing: 'border-box' }}
                             >
                                 <WalletCards size={16} />
                                 <span className="navbar-action-label">Deposit</span>
                             </button>
-                            <button
-                                type="button"
-                                className="btn-secondary navbar-action"
-                                onClick={logout}
-                                aria-label="Logout"
-                            >
-                                <LogOut size={16} />
-                                <span className="navbar-action-label">Logout</span>
-                            </button>
+                            <div ref={profileRef} style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
+                                <button
+                                    type="button"
+                                    className="btn-secondary navbar-action"
+                                    onClick={() => setProfileOpen(prev => !prev)}
+                                    aria-label="Profile menu"
+                                    style={{ padding: '4px 6px', height: '40px', boxSizing: 'border-box' }}
+                                >
+                                    <img
+                                        src={user.avatar}
+                                        alt=""
+                                        style={{ width: '32px', height: '32px', borderRadius: '50%', objectFit: 'cover' }}
+                                    />
+                                </button>
+                                {profileOpen && (
+                                    <div style={dropdownBase}>
+                                        <Link
+                                            to="/profile"
+                                            className="dropdown-item"
+                                            style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '8px 12px', color: '#fff', textDecoration: 'none', borderRadius: '4px', fontSize: '14px' }}
+                                            onClick={() => setProfileOpen(false)}
+                                        >
+                                            <User size={16} />
+                                            Profile
+                                        </Link>
+                                        <Link
+                                            to="/profile"
+                                            className="dropdown-item"
+                                            style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '8px 12px', color: '#fff', textDecoration: 'none', borderRadius: '4px', fontSize: '14px' }}
+                                            onClick={() => setProfileOpen(false)}
+                                        >
+                                            <Settings size={16} />
+                                            Settings
+                                        </Link>
+                                        <div style={{ borderTop: '1px solid #333', margin: '4px 0' }} />
+                                        <button
+                                            className="dropdown-item"
+                                            style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '8px 12px', color: '#fff', background: 'none', border: 'none', borderRadius: '4px', width: '100%', textAlign: 'left', cursor: 'pointer', fontSize: '14px' }}
+                                            onClick={() => { logout(); setProfileOpen(false); }}
+                                        >
+                                            <LogOut size={16} />
+                                            Logout
+                                        </button>
+                                    </div>
+                                )}
+                            </div>
                         </>
                     ) : (
                         <a className="btn-primary navbar-action" href="/api/auth/steam">

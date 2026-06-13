@@ -14,8 +14,27 @@ const db = new sqlite3.Database(dbPath, (err) => {
                 avatar TEXT,
                 gems REAL DEFAULT 0,
                 role TEXT DEFAULT 'user',
-                wager_req REAL DEFAULT 0
+                wager_req REAL DEFAULT 0,
+                player_id INTEGER UNIQUE,
+                token_version INTEGER DEFAULT 0
             )`);
+
+            // For existing databases that don't have player_id yet (SQLite ALTER TABLE can't add UNIQUE)
+            db.run("ALTER TABLE users ADD COLUMN player_id INTEGER", (e) => {
+                if (e) { /* column already exists, ignore */ }
+            });
+            db.all("SELECT id, player_id FROM users WHERE player_id IS NULL LIMIT 1", (err, rows) => {
+                if (!err && rows && rows.length > 0) {
+                    db.all("SELECT id FROM users WHERE player_id IS NULL", (err2, all) => {
+                        if (err2 || !all) return;
+                        for (const row of all) {
+                            const pid = 100000 + row.id;
+                            db.run("UPDATE users SET player_id = ? WHERE id = ?", [pid, row.id]);
+                        }
+                        console.log(`Generated player_ids for ${all.length} existing users`);
+                    });
+                }
+            });
 
             db.run(`CREATE TABLE IF NOT EXISTS cases (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -193,6 +212,41 @@ const db = new sqlite3.Database(dbPath, (err) => {
                 }
             });
 
+            // Safe migration: Add affiliate/daily_case/referral columns to users
+            db.all("PRAGMA table_info(users)", (err, columns) => {
+                if (!err && columns) {
+                    const hasReferredBy = columns.some(c => c.name === 'referred_by');
+                    const hasAffiliateCode = columns.some(c => c.name === 'affiliate_code');
+                    const hasAffiliateEarnings = columns.some(c => c.name === 'affiliate_earnings');
+                    const hasLastDailyCase = columns.some(c => c.name === 'last_daily_case');
+                    const hasWelcomeCases = columns.some(c => c.name === 'welcome_cases');
+                    const hasDailyCaseStreak = columns.some(c => c.name === 'daily_case_streak');
+                    const hasOnboardingDone = columns.some(c => c.name === 'onboarding_done');
+
+                    if (!hasReferredBy) db.run("ALTER TABLE users ADD COLUMN referred_by INTEGER", (e) => { if (e) console.log("Migration: referred_by", e.message); });
+                    if (!hasAffiliateCode) db.run("ALTER TABLE users ADD COLUMN affiliate_code TEXT", (e) => { if (e) console.log("Migration: affiliate_code", e.message); });
+                    if (!hasAffiliateEarnings) db.run("ALTER TABLE users ADD COLUMN affiliate_earnings REAL DEFAULT 0", (e) => { if (e) console.log("Migration: affiliate_earnings", e.message); });
+                    if (!hasLastDailyCase) db.run("ALTER TABLE users ADD COLUMN last_daily_case DATETIME", (e) => { if (e) console.log("Migration: last_daily_case", e.message); });
+                    if (!hasWelcomeCases) db.run("ALTER TABLE users ADD COLUMN welcome_cases INTEGER DEFAULT 0", (e) => { if (e) console.log("Migration: welcome_cases", e.message); });
+                    if (!hasDailyCaseStreak) db.run("ALTER TABLE users ADD COLUMN daily_case_streak INTEGER DEFAULT 0", (e) => { if (e) console.log("Migration: daily_case_streak", e.message); });
+                    if (!hasOnboardingDone) db.run("ALTER TABLE users ADD COLUMN onboarding_done BOOLEAN DEFAULT 0", (e) => { if (e) console.log("Migration: onboarding_done", e.message); });
+                    const hasTokenVersion = columns.some(c => c.name === 'token_version');
+                    if (!hasTokenVersion) db.run("ALTER TABLE users ADD COLUMN token_version INTEGER DEFAULT 0", (e) => { if (e) console.log("Migration: token_version", e.message); });
+                }
+            });
+
+            db.run(`CREATE TABLE IF NOT EXISTS affiliate_transactions (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                affiliate_id INTEGER NOT NULL,
+                referred_user_id INTEGER NOT NULL,
+                type TEXT NOT NULL,
+                amount REAL NOT NULL,
+                commission REAL NOT NULL,
+                created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY(affiliate_id) REFERENCES users(id),
+                FOREIGN KEY(referred_user_id) REFERENCES users(id)
+            )`);
+
             db.run(`CREATE TABLE IF NOT EXISTS bot_inventory (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 item_name TEXT,
@@ -242,6 +296,41 @@ const db = new sqlite3.Database(dbPath, (err) => {
                     console.log("Seeded bot_inventory with 15 fallback items (table was empty).");
                 });
             });
+
+            db.run(`CREATE TABLE IF NOT EXISTS balance_history (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id INTEGER NOT NULL,
+                change REAL NOT NULL,
+                new_balance REAL NOT NULL,
+                description TEXT,
+                multiplier REAL,
+                timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY(user_id) REFERENCES users(id)
+            )`);
+
+            // Drop old trigger if it exists from previous version
+            db.run("DROP TRIGGER IF EXISTS log_balance_change");
+
+            db.run(`CREATE TABLE IF NOT EXISTS support_tickets (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id INTEGER NOT NULL,
+                subject TEXT NOT NULL,
+                status TEXT DEFAULT 'open',
+                created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY(user_id) REFERENCES users(id)
+            )`);
+
+            db.run(`CREATE TABLE IF NOT EXISTS ticket_messages (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                ticket_id INTEGER NOT NULL,
+                user_id INTEGER,
+                message TEXT NOT NULL,
+                is_admin BOOLEAN DEFAULT 0,
+                created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY(ticket_id) REFERENCES support_tickets(id),
+                FOREIGN KEY(user_id) REFERENCES users(id)
+            )`);
 
             console.log('All tables ready.');
         });

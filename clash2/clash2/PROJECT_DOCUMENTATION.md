@@ -8,24 +8,26 @@ Diese Dokumentation fasst den aktuellen Stand des Projekts zusammen, damit in ei
 - **Authentifizierung:** JWT (JSON Web Tokens) + Steam OAuth.
 
 ## 📂 Dateistruktur (Wichtigste Dateien)
-- `frontend/src/App.jsx`: Main Routing & Layout (Navbar, Chat-Sidebar).
+- `frontend/src/App.jsx`: Main Routing & Layout (Navbar, Chat-Sidebar, Feed-Sidebar, Expand-Handles).
 - `frontend/src/contexts/AuthContext.jsx`: Verwaltet User-Session, Token und das optimistische Balance-Update (`setUser`).
 - `frontend/src/utils/sounds.js`: Web Audio API Modul für alle Soundeffekte (Karten, Explosionen, Ticks).
 - `frontend/src/components/Chat.jsx`: Chat-Sidebar mit Live Chat und **Live Game Feed** (Toggle zwischen beiden Views).
+- `frontend/src/components/LiveGamesFeed.jsx`: Live Game Feed mit All/Top-Filter und Steam-Avatar-Anzeige, klickbare Items navigieren zur Spiel-Route.
 - `frontend/src/components/RouletteSpinner.jsx`: Roulette-Spinner-Animation für Case Openings (mit Mythic-Spin Support).
-- `frontend/src/components/Navbar.jsx`: Navbar mit Brand "CSMOLLY", Games-Dropdown, Balance-Anzeige, User-Dropdown (Desktop + Mobile).
-- `frontend/src/components/LiveGamesFeed.jsx`: Live Game Feed mit All/Top-Filter und Steam-Avatar-Anzeige.
-- `frontend/src/index.css`: Globales Styling inkl. responsive Breakpoints (mobile/tablet ≤1280px, tablet 769–1280px, desktop ≥1281px).
+- `frontend/src/components/Navbar.jsx`: Navbar mit Brand "CSMOLLY", Games-Dropdown, Balance-Anzeige, Daily/Deposit/Profile-Buttons, User-Dropdown (Desktop + Mobile).
 - `backend/server.js`: Hauptserver, API-Endpunkte, SQLite-Queries, `broadcastGameResult()`-Funktion für den Game Feed.
 - `backend/battleEngine.js`: Externe Logik für Case Battles (Lobby, Timer, Bot-Logik, Game Feed Broadcast).
 - `backend/chatEngine.js`: Socket.io Chat + Game Feed History Emission bei Verbindung.
 - `backend/admin.js`: CLI-Tool für Admin-Aufgaben (z.B. Gems vergeben: `node admin.js add-gems Username 1000`).
+- `frontend/src/index.css`: Globales Styling inkl. responsive Breakpoints (mobile/tablet ≤1280px, tablet 769–1280px, desktop ≥1281px).
+- `frontend/src/pages/FreeDailyCase.jsx`: Täglicher Free Case mit Steam-Anforderungsprüfung, Welcome Cases, Transfer-Image-Overlay.
+- `frontend/src/pages/Terms.jsx`: Terms of Service und Privacy Policy mit Tab-Toggle.
 
 ## 🎮 Implementierte Spielmodi
 1. **Cases (Solo & Creator):** Eigene Cases können erstellt werden. Items haben Bilder und Wahrscheinlichkeiten. "Mythic Spin" Modus (hebt Items >150% Profit hervor). Erstellungs-Option für Case Battles wurde in den `/battles` Bereich verschoben.
 2. **Case Battles:** Multiplayer via WebSockets. Modi: 1v1, 1v1v1, 2v2, 3v3, FFA. "Crazy Mode" (wenigster Loot gewinnt). Voller Bot-Support. Case-Battle-Erstellung ist exklusiv hier eingebettet.
 3. **Upgrader:** SVG-Ring-Spinner. Win-Chance wird berechnet (`(Bet * 0.99) / Ziel-Preis`). 99% RTP ist fest einprogrammiert.
-4. **Crash:** Raketen-Animation mit Cashout-Funktion. 
+4. **Crash:** Raketen-Animation mit Cashout-Funktion.
    - **Historie:** Anzeige der letzten 9 Multiplikatoren direkt über dem Spielfeld (neuester Wert ganz rechts). Werte unter 2.00x sind rot, Werte ab 2.00x sind grün.
    - **Ping-Anzeige:** Echtzeit-Latenz-Anzeige basierend auf Round-Trip-Messung zum Backend.
    - **Sound-Updates:** Klassische Raketen-Beeps wurden durch Bombensounds (`bomb_planted.mp3` & `bomb_exploding.m4a`) ersetzt.
@@ -42,8 +44,9 @@ Diese Dokumentation fasst den aktuellen Stand des Projekts zusammen, damit in ei
 
 ### Chat
 - Jedes Zeichen kostet 1 Gem. Fireworks kosten 1000 Gems und lösen eine `canvas-confetti` Animation aus.
-- History wird über `chatEngine.js` verwaltet (letzte 50 Nachrichten).
-- UI bietet kleine Pfeil-Buttons (Collapse-Arrows) am Rand, um den Chat oder den Live-Feed komplett ein-/auszuklappen bzw. zu verstecken.
+- History wird über `chatEngine.js` verwaltet (letzte 30 Nachrichten).
+- Chat-Messages-Bereich hat `overflow: hidden` (kein internes Scrollen) auf Desktop.
+- UI bietet kleine Pfeil-Buttons (Collapse-Arrows) am Rand, um den Chat oder den Live-Feed komplett ein-/auszuklappen bzw. zu verstecken (nur auf Mobile sichtbar).
 
 ### Live Game Feed
 - **Toggle:** Chat-Sidebar hat zwei Tabs: `💬 Chat` und `📊 Live Feed`.
@@ -56,11 +59,14 @@ Diese Dokumentation fasst den aktuellen Stand des Projekts zusammen, damit in ei
 - **Feed-Karten:** Zeigen Username (mit Steam-Avatar-Bild 24×24), Spielname, Einsatz, Multiplikator und Profit/Verlust.
   - **Grün** (`#22c55e`): Profit > 0 (Gewinn).
   - **Rot** (`#ef4444`): Profit ≤ 0 (Verlust oder Break-even).
-- **Filter:** "All" (alle) und "Top" (Profit/Bet > 5x, geändert von 10x).
-- **History:** Beim Verbinden werden die letzten 50 Ergebnisse aus `global.gameFeedHistory` gesendet.
+- **Filter:** "All" (alle) und "Top" (Profit/Bet > 5x).
+- **History:** Beim Verbinden werden die letzten 20 Ergebnisse aus `global.gameFeedHistory` gesendet (maximal 20 im Feed sichtbar).
+- **Klick-Navigation:** Feed-Items sind klickbar (`cursor: pointer`) und navigieren zur entsprechenden Spielseite (Double→/double, Crash→/crash, etc.).
 
 ## 🎨 Design, Background & Menü-Interaktionen
 - **Hintergrundbild (`background1`):** Das vordefinierte Hintergrundbild (`background1`) wird responsive so gecroppt, dass linker und rechter Rand perfekt passen und kein monotoner Hintergrund angezeigt wird.
+- **Navbar (Desktop ≥1281px):** `position: fixed; top: 0; left: 0; right: 0; height: 64px` — spannt vollständig von links nach rechts. Chat und Feed sind mit `top: 64px` darunter positioniert.
+- **Navbar-Buttons:** Alle drei Action-Buttons (Daily, Deposit, Profile) haben einheitliche `height: 40px; boxSizing: border-box`. Der Daily-Button (`<Link>`) hat `borderRadius: '4px'` für konsistente Optik. Der Profile-Button-Wrapper hat `display: flex; alignItems: center`.
 - **Spiele-Dropdown:** Klicks außerhalb des Spiele-Dropdowns schließen dieses automatisch.
 - **Emojis durch Icons ersetzt:** Im Spiele-Dropdown und auf der Startseite wurden die Emojis durch professionelle Icons ersetzt. Die Spiele Plinko, Keep Digging, Chicken Road, Blackjack und Slots sind im Menü ausgeblendet.
 
@@ -68,19 +74,20 @@ Diese Dokumentation fasst den aktuellen Stand des Projekts zusammen, damit in ei
 
 - **Breakpoint:** Alle mobilen/tablet-spezifischen Regeln greifen bei ≤1280px (geändert von 768px, um iPad 9 (1080px landscape) abzudecken).
 - **Navbar (mobil):** 3-Spalten-Grid: links `[Hamburger · CSMOLLY · Games]`, mitte `[Gems-Balance]`, rechts `[User-Dropdown]`.
-  - `navbar-center` ist auf Desktop sichtbar, auf Mobile zentriert.
+  - `navbar-center` ist auf Desktop sichtbar, auf Mobile ausgeblendet.
   - `navbar-mobile-right` ersetzt `navbar-right` auf Mobile (Dropdown statt Buttons).
   - Brand "CSMOLLY" wird nicht mehr absolut zentriert (kein `position: absolute; left: 50%; transform: translateX(-50%)`).
 - **Chat (mobil ≤1280px):** Fullscreen-Overlay (`position: fixed; inset: 0`), öffnet per Floating-Button (unten-rechts).
   - **Tablet (769–1280px):** Chat öffnet als 320px rechte Seitenleiste (nicht Fullscreen).
 - **Body-Scroll-Sperre:** Bei geöffnetem Chat auf Mobile wird `document.body.style.position = 'fixed'` gesetzt (mit Speichern/Wiederherstellen von `scrollY`).
 - **Chat-Nachrichten & Feed:** `overscroll-behavior: contain` auf scrollbaren Containern.
+- **Expand-Handles:** Auf Desktop (≥1281px) sind die Collapse-Pfeil-Buttons (`.expand-handle`) ausgeblendet (`display: none`).
 
 ## 🐛 Kürzlich behobene Bugs & Besonderheiten (WICHTIG für künftige Prompts)
-- **Race Conditions / Moneyhacks:** 
+- **Race Conditions / Moneyhacks:**
   - Buttons für das Erstellen von Battles (`Cases.jsx`) und das Rufen von Bots (`Battle.jsx`) haben strikte Cooldowns (500ms) und `isCreating`-Locks, um Doppel-Requests durch Button-Spamming zu verhindern.
-- **Optimistische Balance-Updates ("Spoiler-Schutz"):** 
-  - Bei Spielen wie Plinko, Upgrader, Blackjack oder Cases wird im Backend das Ergebnis *sofort* in der Datenbank verbucht. 
+- **Optimistische Balance-Updates ("Spoiler-Schutz"):**
+  - Bei Spielen wie Plinko, Upgrader, Blackjack oder Cases wird im Backend das Ergebnis *sofort* in der Datenbank verbucht.
   - Würde das Frontend nach dem Einsatz sofort einen DB-Fetch machen, wüsste der Spieler durch seinen Kontostand sofort, ob er gewonnen hat, noch bevor die Animation beendet ist.
   - **Lösung:** Wir nutzen `setUser(prev => ({ ...prev, gems: prev.gems - betAmount }))` aus dem `AuthContext`, um optisch **nur den Einsatz abzuziehen**. Der echte Kontostand (inklusive etwaigem Gewinn) wird erst nach der Animation über `refreshBalance()` neu vom Server geladen.
 - **Plinko-Pfad:** Das Backend gibt den Pfad zwingend als Array mit `'R'` und `'L'` aus, nicht als `1` und `-1`.
@@ -100,6 +107,8 @@ Diese Dokumentation fasst den aktuellen Stand des Projekts zusammen, damit in ei
 - **Registrierung entfernt:** Homepage-Button, `/register`-Route und Import in `App.jsx` entfernt.
 - **Login auf Startseite:** Geht direkt zu `/api/auth/steam` (keine Login-Seite).
 - **Node.js Upgrade:** Von 20.11.1 auf 22.14.0 (nötig für Vite 8).
+- **Chat/Feed Limits reduziert:** Chat-History von 50 auf 30 Nachrichten reduziert. Feed-History von 50 auf 20 Einträge reduziert. Beide Bereiche auf Desktop auf `overflow: hidden` gesetzt (kein Scrollen der Nachrichten-Container).
+- **Navbar Desktop-Layout:** Navbar verwendet jetzt `position: fixed` auf Desktop (≥1281px) und spannt über die volle Breite. Chat-Sidebar und Feed-Sidebar sind mit `top: 64px` darunter positioniert. Expand-Handles sind auf Desktop ausgeblendet. `body { overflow-x: hidden }` verhindert horizontale Scrollbalken.
 
 ## 🔧 Architektur-Details
 
@@ -120,7 +129,7 @@ global.broadcastGameResult = (username, gameName, betAmount, payoutAmount, multi
 ### Socket Events (Game Feed)
 | Event | Richtung | Beschreibung |
 |-------|----------|-------------|
-| `game_feed_history` | Server → Client | Array der letzten 50 Ergebnisse bei Verbindung |
+| `game_feed_history` | Server → Client | Array der letzten 20 Ergebnisse bei Verbindung |
 | `game_feed_update` | Server → Client | Einzelnes neues Ergebnis (wird mit 5s Delay im Frontend angezeigt) |
 
 ## 🚫 Deaktivierte Features (Kalshi Bets)

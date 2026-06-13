@@ -348,22 +348,63 @@ export default function DepositWithdrawModal({ isOpen, onClose, initialTab }) {
                                             gridTemplateColumns: 'repeat(auto-fill, minmax(100px, 1fr))',
                                             gap: '10px'
                                         }}>
-                                            {activeTradeOffer.items.map((item, idx) => (
-                                                <div 
-                                                    key={idx}
-                                                    style={{
-                                                        backgroundColor: '#1b2838',
-                                                        border: '1px solid #3d4450',
-                                                        borderRadius: '3px',
-                                                        padding: '8px',
-                                                        display: 'flex',
-                                                        flexDirection: 'column',
-                                                        alignItems: 'center',
-                                                        textAlign: 'center',
-                                                        justifyContent: 'space-between',
-                                                        position: 'relative'
-                                                    }}
+                                            {activeTradeOffer.items.map((item, idx) => {
+                                                const rarityColors = {
+                                                    'Consumer': '#b0c3d9',
+                                                    'Industrial': '#5e98d9',
+                                                    'Mil-Spec': '#4b69ff',
+                                                    'Restricted': '#8847ff',
+                                                    'Classified': '#d32cee',
+                                                    'Covert': '#eb4b4b',
+                                                    'Special': '#ffd700',
+                                                    'Rare': '#ffd700',
+                                                    'Extraordinary': '#ffd700',
+                                                    'Contraband': '#ffaf00'
+                                                };
+                                        const rarityHex = rarityColors[item.rarity] || '#8f98a0';
+                                        const rarityBg = rarityHex + '15';
+                                        const wearMatch = item.name.match(/\((Factory New|Minimal Wear|Field-Tested|Well-Worn|Battle-Scarred)\)/);
+                                        const wearShort = wearMatch ? {
+                                            'Factory New': 'FN',
+                                            'Minimal Wear': 'MW',
+                                            'Field-Tested': 'FT',
+                                            'Well-Worn': 'WW',
+                                            'Battle-Scarred': 'BS'
+                                        }[wearMatch[1]] : '';
+                                        return (
+                                        <div 
+                                            key={idx}
+                                            style={{
+                                                background: `radial-gradient(ellipse at center, ${rarityBg} 0%, transparent 70%), #1b2838`,
+                                                border: `3px solid ${rarityHex}`,
+                                                borderRadius: '3px',
+                                                padding: '8px',
+                                                display: 'flex',
+                                                flexDirection: 'column',
+                                                alignItems: 'center',
+                                                textAlign: 'center',
+                                                justifyContent: 'space-between',
+                                                position: 'relative',
+                                                boxShadow: `0 0 15px ${rarityHex}, 0 0 30px ${rarityHex}77`
+                                            }}
                                                 >
+                                                    {wearShort && (
+                                                        <div style={{
+                                                            position: 'absolute',
+                                                            top: '4px',
+                                                            left: '4px',
+                                                            fontSize: '10px',
+                                                            fontWeight: 'bold',
+                                                            color: '#fff',
+                                                            background: 'rgba(0,0,0,0.75)',
+                                                            padding: '2px 6px',
+                                                            borderRadius: '4px',
+                                                            lineHeight: 1,
+                                                            zIndex: 1
+                                                        }}>
+                                                            {wearShort}
+                                                        </div>
+                                                    )}
                                                     <img src={item.image_url} alt={item.name} style={{ width: '60px', height: '60px', objectFit: 'contain' }} />
                                                     <div style={{ fontSize: '9px', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden', height: '24px', marginTop: '4px', color: '#c6d4df' }}>
                                                         {item.name}
@@ -372,7 +413,8 @@ export default function DepositWithdrawModal({ isOpen, onClose, initialTab }) {
                                                         ${item.value.toFixed(2)}
                                                     </div>
                                                 </div>
-                                            ))}
+                                                );
+                                            })}
                                         </div>
                                     </div>
 
@@ -863,13 +905,37 @@ export default function DepositWithdrawModal({ isOpen, onClose, initialTab }) {
                                 }}>
                                     {inventory.map((item, idx) => {
                                         const isSelected = !!selectedItems[`item_${idx}`];
+                                        // Rarity glow colors
+                                        const rarityColors = {
+                                            'Consumer': '#b0c3d9',
+                                            'Industrial': '#5e98d9',
+                                            'Mil-Spec': '#4b69ff',
+                                            'Restricted': '#8847ff',
+                                            'Classified': '#d32cee',
+                                            'Covert': '#eb4b4b',
+                                            'Special': '#ffd700',
+                                            'Rare': '#ffd700',
+                                            'Extraordinary': '#ffd700',
+                                            'Contraband': '#ffaf00'
+                                        };
+                                                const rarityHex = rarityColors[item.rarity] || '#8f98a0';
+                                                const rarityBg = rarityHex + '15';
+                                        // Extract wear from name
+                                        const wearMatch = item.name.match(/\((Factory New|Minimal Wear|Field-Tested|Well-Worn|Battle-Scarred)\)/);
+                                        const wearShort = wearMatch ? {
+                                            'Factory New': 'FN',
+                                            'Minimal Wear': 'MW',
+                                            'Field-Tested': 'FT',
+                                            'Well-Worn': 'WW',
+                                            'Battle-Scarred': 'BS'
+                                        }[wearMatch[1]] : '';
                                         return (
                                             <div 
                                                 key={idx}
                                                 onClick={() => handleSelectItem(item, idx)}
                                                 style={{
-                                                    background: isSelected ? 'rgba(34, 197, 94, 0.08)' : 'rgba(30, 41, 59, 0.3)',
-                                                    border: isSelected ? '1px solid var(--accent-green)' : '1px solid rgba(255, 255, 255, 0.05)',
+                                                    background: `radial-gradient(ellipse at center, ${rarityBg} 0%, transparent 70%), ${isSelected ? 'rgba(34, 197, 94, 0.08)' : 'rgba(30, 41, 59, 0.3)'}`,
+                                                    border: `3px solid ${rarityHex}`,
                                                     borderRadius: '12px',
                                                     padding: '12px',
                                                     cursor: 'pointer',
@@ -879,9 +945,28 @@ export default function DepositWithdrawModal({ isOpen, onClose, initialTab }) {
                                                     justifyContent: 'space-between',
                                                     alignItems: 'center',
                                                     transition: 'all 0.2s',
-                                                    position: 'relative'
+                                                    position: 'relative',
+                                                    boxShadow: `0 0 20px ${rarityHex}, 0 0 40px ${rarityHex}77`
                                                 }}
                                             >
+                                                {/* Wear badge (top left) */}
+                                                {wearShort && (
+                                                    <div style={{
+                                                        position: 'absolute',
+                                                        top: '6px',
+                                                        left: '6px',
+                                                        fontSize: '11px',
+                                                        fontWeight: 'bold',
+                                                        color: '#fff',
+                                                        background: 'rgba(0,0,0,0.75)',
+                                                        padding: '3px 7px',
+                                                        borderRadius: '5px',
+                                                        lineHeight: 1,
+                                                        zIndex: 1
+                                                    }}>
+                                                        {wearShort}
+                                                    </div>
+                                                )}
                                                 {/* Checkbox badge */}
                                                 <div style={{
                                                     position: 'absolute',

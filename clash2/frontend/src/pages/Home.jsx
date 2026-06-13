@@ -7,6 +7,7 @@ import minesIcon from '../assets/mines.png';
 import battlesIcon from '../assets/battles.png';
 import casesIcon from '../assets/cases.png';
 import upgraderIcon from '../assets/upgrader.png';
+import mollyFlames from '../assets/molly_flames.png';
 
 export default function Home() {
     const { user } = useAuth();
@@ -45,14 +46,15 @@ export default function Home() {
                     pointerEvents: 'none'
                 }} />
 
-                <h1 style={{ fontSize: '3.5rem', fontWeight: '900', marginBottom: '15px', letterSpacing: '-1px' }}>
-                    Welcome to <span style={{
+                <h1 style={{ fontSize: '3.5rem', fontWeight: '900', marginBottom: '15px', letterSpacing: '-1px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '15px' }}>
+                    <img src={mollyFlames} alt="" style={{ height: '48px', width: 'auto' }} />
+                    <span style={{
                         background: 'linear-gradient(135deg, #FF6B35 0%, #FF8C00 50%, #FFB347 100%)',
                         WebkitBackgroundClip: 'text',
                         WebkitTextFillColor: 'transparent',
                         fontWeight: '950',
                         textShadow: '0 0 15px rgba(255, 107, 53, 0.3)'
-                    }}>csmolly.bet</span>
+                    }}>CSMOLLY.BET</span>
                 </h1>
                 <p style={{ color: '#aaa', fontSize: '1.2rem', marginBottom: '35px', maxWidth: '600px', margin: '0 auto 35px' }}>
                     The only CS2 gambling site where the house has a 1% house edge, provably fair and secure! In Clash gg, the house has a 8.5% edge.

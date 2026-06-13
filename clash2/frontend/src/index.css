@@ -20,6 +20,13 @@ html {
   width: 100%;
   min-height: 100%;
   background-color: var(--bg-dark);
+  overflow: auto;
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+html::-webkit-scrollbar {
+  display: none;
 }
 
 body {
@@ -32,6 +39,22 @@ body {
   background-repeat: no-repeat;
   color: var(--text-main);
   line-height: 1.5;
+}
+
+.chat-messages::-webkit-scrollbar {
+  display: none;
+}
+
+.chat-messages {
+  scrollbar-width: none;
+}
+
+.feed-messages::-webkit-scrollbar {
+  display: none;
+}
+
+.feed-messages {
+  scrollbar-width: none;
 }
 
 a {
@@ -330,7 +353,24 @@ button:hover {
   justify-content: center;
 }
 
+.mobile-daily-btn {
+  background: none;
+  border: none;
+  color: #FF6B35;
+  width: 36px;
+  height: 36px;
+  cursor: pointer;
+  padding: 0;
+  display: none;
+  align-items: center;
+  justify-content: center;
+}
+
 @media (max-width: 1280px) {
+  .mobile-daily-btn {
+    display: inline-flex;
+  }
+
   .app-layout {
     flex-direction: column;
   }
@@ -342,10 +382,10 @@ button:hover {
     right: 0;
     height: 64px;
     z-index: 1200;
-    display: grid;
-    grid-template-columns: 1fr auto 1fr;
+    display: flex;
     align-items: center;
-    padding: 10px 12px;
+    justify-content: space-between;
+    padding: 10px 15px;
   }
 
   .sidebar {
@@ -419,21 +459,16 @@ button:hover {
     display: flex;
     align-items: center;
     gap: 8px;
-    justify-self: start;
   }
   
   .navbar-mobile-right {
     display: flex;
     align-items: center;
     position: relative;
-    justify-self: end;
   }
 
   .navbar-center {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    justify-self: center;
+    display: none;
   }
 
   .navbar-right {
@@ -453,7 +488,11 @@ button:hover {
     white-space: nowrap;
   }
 
-  .navbar-action {
+.dropdown-item:hover {
+  background-color: rgba(255, 255, 255, 0.08) !important;
+}
+
+.navbar-action {
     min-width: 40px;
     min-height: 40px;
     padding: 9px 10px;
@@ -501,6 +540,9 @@ button:hover {
 
 @media (min-width: 1281px) {
   .mobile-menu-btn {
+    display: none !important;
+  }
+  .mobile-daily-btn {
     display: none !important;
   }
 }
@@ -587,11 +629,25 @@ button:hover {
 
 /* 2-Column Sidebar Layout (Chat Left, Feed Right on Desktop) */
 @media (min-width: 1281px) {
+  .top-navbar {
+    position: fixed !important;
+    top: 0 !important;
+    left: 0 !important;
+    right: 0 !important;
+    z-index: 1001 !important;
+    height: 64px !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: space-between !important;
+    padding: 10px 20px !important;
+  }
+
   .sidebar {
     display: none !important;
   }
   
   .main-content {
+    padding-top: 64px !important;
     margin-left: 280px !important;
     margin-right: 280px !important;
     width: calc(100% - 560px) !important;
@@ -600,10 +656,11 @@ button:hover {
   
   .chat-sidebar {
     position: fixed !important;
-    top: 0 !important;
+    top: 64px !important;
     left: 0 !important;
     bottom: 0 !important;
     right: auto !important;
+    height: auto !important;
     width: 280px !important;
     background-color: var(--bg-panel);
     border-right: 2px solid #333 !important;
@@ -617,10 +674,11 @@ button:hover {
   
   .feed-sidebar {
     position: fixed !important;
-    top: 0 !important;
+    top: 64px !important;
     right: 0 !important;
     bottom: 0 !important;
     left: auto !important;
+    height: auto !important;
     width: 280px !important;
     background-color: var(--bg-panel);
     border-left: 2px solid #333 !important;
@@ -650,6 +708,10 @@ button:hover {
   
   .chat-collapsed.feed-collapsed .main-content {
     width: 100% !important;
+  }
+
+  .expand-handle {
+    display: none !important;
   }
   
   .chat-toggle-btn {
@@ -682,5 +744,247 @@ button:hover {
   .games-dropdown-wrapper {
     display: none !important;
   }
+}
+
+/* Profile Page */
+.profile-page {
+  display: flex;
+  gap: 24px;
+  max-width: 1000px;
+  margin: 0 auto;
+  min-height: 400px;
+}
+
+.profile-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 180px;
+  background: var(--bg-panel);
+  border-radius: 8px;
+  padding: 12px;
+  border: 1px solid #2a2a2a;
+  align-self: flex-start;
+  position: sticky;
+  top: 84px;
+}
+
+.profile-panel-btn {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 14px;
+  background: none;
+  border: none;
+  color: #bbb;
+  cursor: pointer;
+  border-radius: 6px;
+  font-size: 14px;
+  text-align: left;
+  transition: all 0.15s;
+  width: 100%;
+}
+
+.profile-panel-btn:hover {
+  background: rgba(255,255,255,0.06);
+  color: #fff;
+}
+
+.profile-panel-btn.active {
+  background: rgba(255,107,53,0.15);
+  color: #FF6B35;
+  font-weight: bold;
+}
+
+.profile-content {
+  flex: 1;
+  min-width: 0;
+}
+
+.profile-tab-content {
+  background: var(--bg-panel);
+  border-radius: 8px;
+  padding: 24px;
+  border: 1px solid #2a2a2a;
+}
+
+.profile-tab-content h2 {
+  margin: 0 0 20px;
+  color: var(--accent-gold);
+  font-size: 22px;
+}
+
+.profile-info-card {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+}
+
+.profile-avatar {
+  width: 72px;
+  height: 72px;
+  border-radius: 50%;
+  object-fit: cover;
+  border: 2px solid var(--accent-gold);
+}
+
+.profile-info-card h3 {
+  margin: 0 0 6px;
+  font-size: 20px;
+  color: #fff;
+}
+
+.profile-gems {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--accent-green);
+  font-weight: bold;
+  font-size: 18px;
+}
+
+/* Balance History */
+.balance-history-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.balance-history-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 14px;
+  background: #1a1a1a;
+  border-radius: 6px;
+  border: 1px solid #2a2a2a;
+}
+
+.balance-change-icon {
+  flex-shrink: 0;
+}
+
+.balance-change-details {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  flex: 1;
+}
+
+.change-positive {
+  color: var(--accent-green);
+  font-weight: bold;
+  font-size: 15px;
+}
+
+.change-negative {
+  color: #F44336;
+  font-weight: bold;
+  font-size: 15px;
+}
+
+.balance-old-new {
+  font-size: 12px;
+  color: #666;
+}
+
+.balance-game {
+  font-size: 13px;
+  color: #aaa;
+  font-weight: 500;
+}
+
+.balance-timestamp {
+  font-size: 12px;
+  color: #666;
+  white-space: nowrap;
+}
+
+/* Settings */
+.settings-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 16px;
+  background: #1a1a1a;
+  border-radius: 6px;
+  border: 1px solid #2a2a2a;
+  cursor: pointer;
+  max-width: 400px;
+}
+
+.settings-item-left {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: #fff;
+  font-size: 15px;
+}
+
+.settings-toggle {
+  width: 44px;
+  height: 24px;
+  border-radius: 12px;
+  position: relative;
+  transition: background 0.2s;
+}
+
+.settings-toggle.on {
+  background: var(--accent-green);
+}
+
+.settings-toggle.off {
+  background: #555;
+}
+
+.settings-toggle-knob {
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: #fff;
+  position: absolute;
+  top: 2px;
+  transition: left 0.2s;
+}
+
+.settings-toggle.on .settings-toggle-knob {
+  left: 22px;
+}
+
+.settings-toggle.off .settings-toggle-knob {
+  left: 2px;
+}
+
+@media (max-width: 1280px) {
+  .profile-page {
+    flex-direction: column;
+  }
+
+  .profile-panel {
+    flex-direction: row;
+    flex-wrap: wrap;
+    gap: 4px;
+    min-width: unset;
+    position: static;
+    padding: 8px;
+  }
+
+  .profile-panel-btn {
+    flex: 1 1 auto;
+    min-width: 0;
+    padding: 8px 6px;
+    font-size: 11px;
+    white-space: nowrap;
+    justify-content: center;
+  }
+
+  .profile-panel-btn span {
+    font-size: 11px;
+  }
+}
+
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
 }
 
