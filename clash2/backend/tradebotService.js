@@ -58,64 +58,7 @@ const getItemPrice = (name) => {
     return 0.03;
 };
 
-// Check and release pending 50% payout of matured deposits (7 days trade lock)
-const startPayoutReleaseLoop = () => {
-    // Run check immediately, then every 30 seconds
-    const checkPayouts = () => {
-        const query = `
-            SELECT d.id, d.user_id, d.item_name, d.item_value, u.username 
-            FROM deposits d 
-            JOIN users u ON d.user_id = u.id 
-            WHERE d.status = 'accepted_half' AND datetime(d.payout_date) <= datetime('now')
-        `;
-        db.all(query, (err, rows) => {
-            if (err) {
-                if (err.message.includes('no such table: deposits')) {
-                    return; // Ignore gracefully during DB initialization
-                }
-                console.error('[Tradebot] Error checking matured payouts:', err.message);
-                return;
-            }
 
-            if (rows && rows.length > 0) {
-                console.log(`[Tradebot] Found ${rows.length} matured deposits ready for payout.`);
-                db.serialize(() => {
-                    db.run('BEGIN TRANSACTION');
-                    let success = true;
-                    rows.forEach(row => {
-                        const remainingPayout = row.item_value * 0.5;
-                        if (!success) return;
-                        db.run('UPDATE users SET gems = gems + ? WHERE id = ?', [remainingPayout, row.user_id], (updateErr) => {
-                            if (updateErr) {
-                                console.error(`[Tradebot] Error crediting remaining gems to user ${row.user_id}:`, updateErr.message);
-                                success = false;
-                                db.run('ROLLBACK');
-                                return;
-                            }
-                            db.run('UPDATE deposits SET status = \'completed\' WHERE id = ?', [row.id], (statusErr) => {
-                                if (statusErr) {
-                                    console.error(`[Tradebot] Error updating deposit ${row.id} status:`, statusErr.message);
-                                    success = false;
-                                    db.run('ROLLBACK');
-                                    return;
-                                }
-                                console.log(`[Tradebot] Payout successful: Credited ${remainingPayout} gems to ${row.username} for matured deposit of ${row.item_name}.`);
-                            });
-                        });
-                    });
-                    if (success) {
-                        db.run('COMMIT', (commitErr) => {
-                            if (commitErr) console.error('[Tradebot] Transaction commit failed:', commitErr.message);
-                        });
-                    }
-                });
-            }
-        });
-    };
-
-    checkPayouts();
-    setInterval(checkPayouts, 30000); // Check every 30 seconds
-};
 
 // Simulated mock CS2 items for inventory loading
 const MOCK_INVENTORY_ITEMS = [
@@ -128,7 +71,6 @@ const MOCK_INVENTORY_ITEMS = [
 ];
 
 module.exports = {
-    startPayoutReleaseLoop,
     MOCK_INVENTORY_ITEMS,
     getItemPrice
 };

@@ -24,8 +24,6 @@ export default function DepositWithdrawModal({ isOpen, onClose, initialTab }) {
     // Withdraw state
     const [botInventory, setBotInventory] = useState([]);
 
-    // Payouts state
-    const [pendingDeposits, setPendingDeposits] = useState([]);
 
     // Simulated trade bot flow state
     const [activeTradeOffer, setActiveTradeOffer] = useState(null);
@@ -90,9 +88,6 @@ export default function DepositWithdrawModal({ isOpen, onClose, initialTab }) {
             } else if (activeTab === 'withdraw') {
                 const res = await axios.get('/api/bot-inventory', { headers });
                 setBotInventory(res.data);
-            } else if (activeTab === 'payouts') {
-                const res = await axios.get('/api/deposits/pending', { headers });
-                setPendingDeposits(res.data);
             }
         } catch (err) {
             setError(err.response?.data?.error || 'Failed to fetch data');
@@ -120,8 +115,7 @@ export default function DepositWithdrawModal({ isOpen, onClose, initialTab }) {
     // Calculate values of selected items
     const selectedList = Object.values(selectedItems);
     const totalValue = selectedList.reduce((sum, item) => sum + item.value, 0);
-    const instantPayout = totalValue * 0.5;
-    const delayedPayout = totalValue * 0.5;
+
 
     // Save trade URL to database
     const handleSaveTradeUrl = async () => {
@@ -223,38 +217,6 @@ export default function DepositWithdrawModal({ isOpen, onClose, initialTab }) {
         }
     };
 
-    // Fast-mature deposits for developers to test the 7 days trade lock instantly
-    const handleForceMature = async () => {
-        setLoading(true);
-        setError('');
-        setMessage('');
-        try {
-            const token = localStorage.getItem('token');
-            const res = await axios.post('/api/deposits/mature-test', {}, {
-                headers: { Authorization: `Bearer ${token}` }
-            });
-            setMessage(res.data.message + " Payout should arrive in ~15-30s.");
-            fetchData();
-        } catch (err) {
-            setError(err.response?.data?.error || 'Failed to mature deposits');
-        } finally {
-            setLoading(false);
-        }
-    };
-
-    // Helper to format remaining time
-    const formatTimeLeft = (seconds) => {
-        if (seconds <= 0) return 'Matured (payout processing)';
-        const days = Math.floor(seconds / (3600 * 24));
-        const hours = Math.floor((seconds % (3600 * 24)) / 3600);
-        const minutes = Math.floor((seconds % 3600) / 60);
-        
-        let parts = [];
-        if (days > 0) parts.push(`${days}d`);
-        if (hours > 0) parts.push(`${hours}h`);
-        parts.push(`${minutes}m`);
-        return parts.join(' ') + ' left';
-    };
 
     if (activeTradeOffer) {
         return (
@@ -776,7 +738,6 @@ export default function DepositWithdrawModal({ isOpen, onClose, initialTab }) {
                     {[
                         { id: 'deposit', label: 'Deposit skins', icon: <ArrowDownLeft size={16} /> },
                         { id: 'withdraw', label: 'Withdraw skins', icon: <ArrowUpRight size={16} /> },
-                        { id: 'payouts', label: 'Pending Payouts (50%)', icon: <Clock size={16} /> }
                     ].map(tab => (
                         <button 
                             key={tab.id}
@@ -1071,61 +1032,7 @@ export default function DepositWithdrawModal({ isOpen, onClose, initialTab }) {
                         </>
                     )}
 
-                    {!loading && activeTab === 'payouts' && (
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-                            <div style={{ fontSize: '14px', color: 'rgba(255, 255, 255, 0.5)' }}>
-                                Active items undergoing the 7 days trade lock (remaining 50% payout).
-                            </div>
-                            
-                            {pendingDeposits.length === 0 ? (
-                                <div style={{ display: 'flex', flex: 1, alignItems: 'center', justifyContent: 'center', color: 'rgba(255, 255, 255, 0.3)', padding: '60px 0' }}>
-                                    No pending payouts found.
-                                </div>
-                            ) : (
-                                <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                                    {pendingDeposits.map((item) => (
-                                        <div 
-                                            key={item.id}
-                                            style={{
-                                                background: 'rgba(30, 41, 59, 0.3)',
-                                                border: '1px solid rgba(255, 255, 255, 0.05)',
-                                                borderRadius: '12px',
-                                                padding: '14px 20px',
-                                                display: 'flex',
-                                                alignItems: 'center',
-                                                justifyContent: 'space-between',
-                                                gap: '20px'
-                                            }}
-                                        >
-                                            <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
-                                                <img 
-                                                    src={item.image_url || 'https://via.placeholder.com/90?text=Skin'} 
-                                                    alt={item.item_name}
-                                                    style={{ width: '48px', height: '48px', objectFit: 'contain' }}
-                                                />
-                                                <div>
-                                                    <div style={{ fontWeight: 600, color: '#fff', fontSize: '14px' }}>{item.item_name}</div>
-                                                    <div style={{ fontSize: '12px', color: 'rgba(255, 255, 255, 0.4)', marginTop: '2px' }}>
-                                                        Original: {item.item_value} Gems | Instantly paid: {(item.item_value * 0.5).toFixed(2)} Gems
-                                                    </div>
-                                                </div>
-                                            </div>
-                                            
-                                            <div style={{ textAlign: 'right', display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                                                <div style={{ color: 'var(--accent-green)', fontWeight: 600, fontSize: '15px', display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: '4px' }}>
-                                                    +{(item.item_value * 0.5).toFixed(2)} Gems pending
-                                                </div>
-                                                <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12px', color: '#f87171', justifyContent: 'flex-end' }}>
-                                                    <Clock size={12} />
-                                                    {formatTimeLeft(item.time_left_seconds)}
-                                                </div>
-                                            </div>
-                                        </div>
-                                    ))}
-                                </div>
-                            )}
-                        </div>
-                    )}
+
                 </div>
 
                 {/* Modal Footer (only visible in Deposit Tab to finalize selection) */}
@@ -1145,16 +1052,16 @@ export default function DepositWithdrawModal({ isOpen, onClose, initialTab }) {
                             </div>
                             <div style={{ borderLeft: '1px solid rgba(255, 255, 255, 0.1)' }}></div>
                             <div>
-                                <div style={{ fontSize: '11px', color: 'rgba(255, 255, 255, 0.4)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Instant Payout (50%)</div>
-                                <div style={{ color: 'var(--accent-green)', fontWeight: 600, fontSize: '15px', marginTop: '2px', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                                    <Gem size={14} /> {instantPayout.toFixed(2)}
+                                <div style={{ fontSize: '11px', color: 'rgba(255, 255, 255, 0.4)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Total Value</div>
+                                <div style={{ color: 'var(--accent-gold)', fontWeight: 600, fontSize: '15px', marginTop: '2px', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                                    <Gem size={14} /> {totalValue.toFixed(2)}
                                 </div>
                             </div>
                             <div style={{ borderLeft: '1px solid rgba(255, 255, 255, 0.1)' }}></div>
                             <div>
-                                <div style={{ fontSize: '11px', color: 'rgba(255, 255, 255, 0.4)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>In 7 Days (50%)</div>
-                                <div style={{ color: 'rgba(255, 255, 255, 0.6)', fontWeight: 500, fontSize: '15px', marginTop: '2px', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                                    <Gem size={14} /> {delayedPayout.toFixed(2)}
+                                <div style={{ fontSize: '11px', color: 'rgba(255, 255, 255, 0.4)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Goes to Inventory</div>
+                                <div style={{ color: 'var(--accent-green)', fontWeight: 600, fontSize: '15px', marginTop: '2px' }}>
+                                    Items
                                 </div>
                             </div>
                         </div>

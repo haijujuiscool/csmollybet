@@ -18,6 +18,7 @@ import Upgrader from './pages/Upgrader';
 import Admin from './pages/Admin';
 import Terms from './pages/Terms';
 import FreeDailyCase from './pages/FreeDailyCase';
+import Inventory from './pages/Inventory';
 import AgeVerificationModal from './components/AgeVerificationModal';
 import WelcomeCaseModal from './components/WelcomeCaseModal';
 import Footer from './components/Footer';
@@ -122,6 +123,7 @@ function App() {
             <Route path='/terms' element={<Terms />} />
             <Route path='/profile' element={<Profile />} />
             <Route path='/daily-case' element={<FreeDailyCase />} />
+            <Route path='/inventory' element={<Inventory />} />
           </Routes>
         </div>
         <Footer />

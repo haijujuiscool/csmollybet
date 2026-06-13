@@ -12,10 +12,9 @@ const path = require('path');
 const sharp = require('sharp');
 const battleEngine = require('./battleEngine');
 const chatEngine = require('./chatEngine');
-const { startPayoutReleaseLoop, getItemPrice } = require('./tradebotService');
+const { getItemPrice } = require('./tradebotService');
 const steamBot = require('./steamBot');
 
-startPayoutReleaseLoop();
 const {
     validateBody,
     validateString,
@@ -520,7 +519,7 @@ app.get('/api/inventory', authenticateToken, async (req, res) => {
                             const rarityTag = desc.tags.find(t => 
                                 t.category === 'Rarity' || t.category === 'Rarity Category' || t.category === 'Quality'
                             );
-                            if (rarityTag) rarity = rarityTag.name.replace(/ Grade$/, '');
+                            if (rarityTag && rarityTag.name) rarity = rarityTag.name.replace(/ Grade$/, '');
                         }
                         // Fallback: parse from type field (e.g. "Covert Pistol", "Mil-Spec Grade SMG")
                         if (!rarity && desc.type) {
@@ -673,14 +672,13 @@ app.post('/api/deposit', authenticateToken, validateBody({
     }
 });
 
-// Confirms a pending deposit trade offer, crediting the user balance and starting the trade lock countdown
+// Confirms a pending deposit trade offer, inserting items into user's inventory
 app.post('/api/deposit/confirm', authenticateToken, validateBody({
     tradeOfferId: val => typeof val === 'string'
 }), (req, res) => {
     const { tradeOfferId } = req.body;
     const userId = req.user.id;
 
-    // Fetch the pending trade offer items to make sure they exist, belong to this user, and are pending
     db.all('SELECT * FROM deposits WHERE user_id = ? AND trade_offer_id = ? AND status = \'pending_offer\'', [userId, tradeOfferId], (err, items) => {
         if (err) {
             console.error(err);
@@ -691,50 +689,49 @@ app.post('/api/deposit/confirm', authenticateToken, validateBody({
             return res.status(404).json({ error: 'Trade offer not found or already processed' });
         }
 
-        // Calculate total value and payout
         const totalValue = items.reduce((sum, item) => sum + item.item_value, 0);
-        const instantPayout = totalValue * 0.5;
 
         db.serialize(() => {
             db.run('BEGIN TRANSACTION');
 
-            // Credit 50% immediately to user's balance
-            db.run('UPDATE users SET gems = gems + ? WHERE id = ?', [instantPayout, userId], (err) => {
-                if (err) {
-                    console.error(err);
+            // Insert each item into user_inventories
+            const stmt = db.prepare('INSERT INTO user_inventories (user_id, item_name, item_value, image_url, trade_offer_id, status) VALUES (?, ?, ?, ?, ?, ?)');
+            let insertErr = null;
+            for (const item of items) {
+                stmt.run([userId, item.item_name, item.item_value, item.image_url || '', tradeOfferId, 'available'], (err) => {
+                    if (err && !insertErr) insertErr = err;
+                });
+            }
+
+            stmt.finalize(() => {
+                if (insertErr) {
+                    console.error(insertErr);
                     db.run('ROLLBACK');
-                    return res.status(500).json({ error: 'Database error crediting gems' });
+                    return res.status(500).json({ error: 'Database error adding items to inventory' });
                 }
 
-                logBalanceChange(userId, instantPayout, 'Deposit', null);
+                // Delete processed deposit records
+                db.run('DELETE FROM deposits WHERE user_id = ? AND trade_offer_id = ?', [userId, tradeOfferId], (delErr) => {
+                    if (delErr) {
+                        console.error(delErr);
+                        db.run('ROLLBACK');
+                        return res.status(500).json({ error: 'Database error cleaning up deposits' });
+                    }
 
-                // Update deposit statuses to 'accepted_half' and set payout_date to 7 days from now
-                db.run(
-                    "UPDATE deposits SET status = 'accepted_half', payout_date = datetime('now', '+7 days') WHERE user_id = ? AND trade_offer_id = ? AND status = 'pending_offer'",
-                    [userId, tradeOfferId],
-                    (updateErr) => {
-                        if (updateErr) {
-                            console.error(updateErr);
-                            db.run('ROLLBACK');
-                            return res.status(500).json({ error: 'Database error updating deposits status' });
+                    db.run('COMMIT', (commitErr) => {
+                        if (commitErr) {
+                            console.error(commitErr);
+                            return res.status(500).json({ error: 'Transaction commit failed' });
                         }
 
-                        db.run('COMMIT', (commitErr) => {
-                            if (commitErr) {
-                                console.error(commitErr);
-                                return res.status(500).json({ error: 'Transaction commit failed' });
-                            }
-
-                            res.json({
-                                success: true,
-                                message: `Simulated trade accepted. Successfully deposited ${items.length} items. Credited ${instantPayout.toFixed(2)} gems immediately. The remaining ${instantPayout.toFixed(2)} gems will be released in 7 days.`,
-                                instantPayout
-                            });
-                            // Track affiliate deposit commission (non-blocking)
-                            trackAffiliateDeposit(userId, totalValue);
+                        res.json({
+                            success: true,
+                            message: `Successfully deposited ${items.length} items to your inventory.`,
+                            items: items.length
                         });
-                    }
-                );
+                        trackAffiliateDeposit(userId, totalValue);
+                    });
+                });
             });
         });
     });
@@ -781,35 +778,60 @@ app.get('/api/deposit/status/:tradeOfferId', authenticateToken, (req, res) => {
     });
 });
 
-// Fetches user's pending deposits and countdown timers
-app.get('/api/deposits/pending', authenticateToken, (req, res) => {
-    db.all(`
-        SELECT *, 
-        (strftime('%s', payout_date) - strftime('%s', 'now')) as time_left_seconds 
-        FROM deposits 
-        WHERE user_id = ? AND status = 'accepted_half'
-        ORDER BY created_at DESC
-    `, [req.user.id], (err, rows) => {
+// Fetches user's inventory items
+app.get('/api/user-inventory', authenticateToken, (req, res) => {
+    db.all('SELECT * FROM user_inventories WHERE user_id = ? ORDER BY created_at DESC', [req.user.id], (err, rows) => {
         if (err) {
             console.error(err);
-            return res.status(500).json({ error: 'Failed to fetch pending deposits' });
+            return res.status(500).json({ error: 'Failed to fetch inventory' });
         }
         res.json(rows || []);
     });
 });
 
-// For testing purposes: makes all active deposits mature immediately (for manual testing convenience)
-app.post('/api/deposits/mature-test', authenticateToken, (req, res) => {
-    db.run(`
-        UPDATE deposits 
-        SET payout_date = datetime('now', '-10 seconds') 
-        WHERE user_id = ? AND status = 'accepted_half'
-    `, [req.user.id], function(err) {
-        if (err) {
-            console.error(err);
-            return res.status(500).json({ error: 'Failed to update payout dates' });
-        }
-        res.json({ success: true, message: `Matured ${this.changes} deposits immediately. Payout checker loop will process them within 30 seconds.` });
+// Sell an inventory item for gems
+app.post('/api/inventory/sell', authenticateToken, validateBody({
+    itemId: val => typeof val === 'number'
+}), (req, res) => {
+    const { itemId } = req.body;
+    const userId = req.user.id;
+
+    db.get('SELECT * FROM user_inventories WHERE id = ? AND user_id = ? AND status = \'available\'', [itemId, userId], (err, item) => {
+        if (err) return res.status(500).json({ error: 'Database error' });
+        if (!item) return res.status(404).json({ error: 'Item not found or already sold/withdrawn' });
+
+        db.serialize(() => {
+            db.run('BEGIN TRANSACTION');
+            db.run('UPDATE users SET gems = gems + ? WHERE id = ?', [item.item_value, userId], (err) => {
+                if (err) { db.run('ROLLBACK'); return res.status(500).json({ error: 'Database error crediting gems' }); }
+                logBalanceChange(userId, item.item_value, 'Sold: ' + item.item_name, null);
+                db.run('UPDATE user_inventories SET status = \'sold\' WHERE id = ?', [itemId], (err) => {
+                    if (err) { db.run('ROLLBACK'); return res.status(500).json({ error: 'Database error updating item' }); }
+                    db.run('COMMIT', (err) => {
+                        if (err) { db.run('ROLLBACK'); return res.status(500).json({ error: 'Transaction commit failed' }); }
+                        res.json({ success: true, message: `Sold ${item.item_name} for ${item.item_value.toFixed(2)} gems.`, gems: item.item_value });
+                    });
+                });
+            });
+        });
+    });
+});
+
+// Withdraw an inventory item (mark for withdrawal)
+app.post('/api/inventory/withdraw', authenticateToken, validateBody({
+    itemId: val => typeof val === 'number'
+}), (req, res) => {
+    const { itemId } = req.body;
+    const userId = req.user.id;
+
+    db.get('SELECT * FROM user_inventories WHERE id = ? AND user_id = ? AND status = \'available\'', [itemId, userId], (err, item) => {
+        if (err) return res.status(500).json({ error: 'Database error' });
+        if (!item) return res.status(404).json({ error: 'Item not found or already sold/withdrawn' });
+
+        db.run('UPDATE user_inventories SET status = \'withdrawing\' WHERE id = ?', [itemId], (err) => {
+            if (err) return res.status(500).json({ error: 'Database error updating item' });
+            res.json({ success: true, message: `Withdrawal request for ${item.item_name} submitted.` });
+        });
     });
 });
 

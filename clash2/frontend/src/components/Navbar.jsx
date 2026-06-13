@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { Link } from 'react-router-dom';
-import { Gem, LogOut, Menu, Settings, User, WalletCards, Gift } from 'lucide-react';
+import { Gem, LogOut, Menu, Settings, User, WalletCards, Gift, Package } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import DepositWithdrawModal from './DepositWithdrawModal';
 
@@ -296,6 +296,15 @@ export default function Navbar({ onToggleSidebar }) {
                                         >
                                             <Settings size={16} />
                                             Settings
+                                        </Link>
+                                        <Link
+                                            to="/inventory"
+                                            className="dropdown-item"
+                                            style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '8px 12px', color: '#fff', textDecoration: 'none', borderRadius: '4px', fontSize: '14px' }}
+                                            onClick={() => setProfileOpen(false)}
+                                        >
+                                            <Package size={16} />
+                                            Inventory
                                         </Link>
                                         <div style={{ borderTop: '1px solid #333', margin: '4px 0' }} />
                                         <button

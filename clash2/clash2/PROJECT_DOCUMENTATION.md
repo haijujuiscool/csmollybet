@@ -109,6 +109,10 @@ Diese Dokumentation fasst den aktuellen Stand des Projekts zusammen, damit in ei
 - **Node.js Upgrade:** Von 20.11.1 auf 22.14.0 (nötig für Vite 8).
 - **Chat/Feed Limits reduziert:** Chat-History von 50 auf 30 Nachrichten reduziert. Feed-History von 50 auf 20 Einträge reduziert. Beide Bereiche auf Desktop auf `overflow: hidden` gesetzt (kein Scrollen der Nachrichten-Container).
 - **Navbar Desktop-Layout:** Navbar verwendet jetzt `position: fixed` auf Desktop (≥1281px) und spannt über die volle Breite. Chat-Sidebar und Feed-Sidebar sind mit `top: 64px` darunter positioniert. Expand-Handles sind auf Desktop ausgeblendet. `body { overflow-x: hidden }` verhindert horizontale Scrollbalken.
+- **Pending Payouts entfernt:** Items gehen direkt in `user_inventories` statt 50% sofort/50% delayed gems. `deposits`-Tabelle und `startPayoutReleaseLoop` wurden entfernt. Deposit bestätigt mit 100% Item-Gutschrift.
+- **Neue Inventory-Seite:** `/inventory` zeigt gelagerte Items mit Sell (→Gems) und Withdraw per Hover. Navbar-Dropdown wurde um Inventory-Link erweitert.
+- **DepositWithdrawModal:** Payouts-Tab entfernt, zeigt "Goes to Inventory" statt Gem-Aufschlüsselung.
+- **Deposit-Loop-Fix:** Steam API lieferte `Rarity`-Tags ohne `name`-Property → `rarityTag.name.replace()` crashte bei Inventory-Fetch. Null-Check hinzugefügt.
 
 ## 🔧 Architektur-Details
 
@@ -161,15 +165,28 @@ Um das Feature wieder in Betrieb zu nehmen, müssen lediglich die oben beschrieb
 - All scripts use the CSGO-API for REAL skin names and images — no fake combos
 - Database auto-overwrite prevention: `database.js` only seeds when `bot_inventory` is empty
 
-### Steam Bot (Simulated Mode)
-- `backend/.env` — Steam credentials are commented out
-- Backend starts in **simulated mode** — no real Steam trade offers
-- Deposits/withdrawals work via mock trade offers in the database
-- To enable real trades, uncomment the Steam credentials in `.env` and handle Steam Guard
+### Steam Bot (Real Mode)
+- `backend/.env` — Steam credentials are set (`STEAM_ACCOUNT_NAME=jujuscol`, `STEAM_PASSWORD=...`)
+- Backend starts in **real Steam bot mode** — connects to Steam (requires Steam Guard code on startup)
+- To enter Steam Guard code: run backend in a console window and input the 5-character code from the Steam mobile app
+- Deposits/withdrawals work via real Steam trade offers once bot is fully logged in
+
+### Item Inventory System (Replaces Gems + Pending Payouts)
+- Deposited items go directly to `user_inventories` table as `available` (status: `available`, `selling`, `withdrawing`)
+- **No gems credited** on deposit — items stay as items
+- **No 7-day payout lock** — items are immediately available
+- `/inventory` page at `frontend/src/pages/Inventory.jsx` — item grid with hover actions:
+  - **Sell** — converts item to gems at full `item_value` via `POST /api/inventory/sell`
+  - **Withdraw** — marks item as `withdrawing` (admin handles trade) via `POST /api/inventory/withdraw`
+- Navbar dropdown has "Inventory" link (`Package` icon) between Settings and Logout
+- DepositWithdrawModal: Payouts tab removed, shows "Goes to Inventory" instead of gem breakdown
+- **Removed old system:** `deposits` table, `startPayoutReleaseLoop`, `/api/deposits/pending`, `/api/deposits/mature-test`
+- New endpoints: `GET /api/user-inventory`, `POST /api/inventory/sell`, `POST /api/inventory/withdraw`
 
 ### Critical Fixes
 - **Nested transaction crash** (`tradebotService.js:122`): Payout loop had `BEGIN TRANSACTION` inside `db.all` callback — moved to single `db.serialize()` wrapper
 - **Fake skin combos**: Seed scripts originally generated random names that didn't exist in CS2 → replaced all 644 items with real CSGO-API data
+- **`rarityTag.name.replace()` crash** (`server.js:522`): Steam inventory API returns `Rarity` tags without a `name` for some items — added `&& rarityTag.name` null check to prevent `Cannot read properties of undefined (reading 'replace')`
 
 ## 🚀 Starten der Umgebung
 Um die Entwicklungsumgebung zu starten, müssen zwei Terminals geöffnet werden:

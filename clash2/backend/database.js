@@ -175,16 +175,16 @@ const db = new sqlite3.Database(dbPath, (err) => {
                 FOREIGN KEY(user_id) REFERENCES users(id)
             )`);
 
-            db.run(`CREATE TABLE IF NOT EXISTS deposits (
+            db.run(`CREATE TABLE IF NOT EXISTS user_inventories (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
-                user_id INTEGER,
-                item_name TEXT,
-                item_value REAL,
-                status TEXT DEFAULT 'pending_offer',
-                created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-                payout_date DATETIME,
-                trade_offer_id TEXT,
+                user_id INTEGER NOT NULL,
+                item_name TEXT NOT NULL,
+                item_value REAL NOT NULL,
                 image_url TEXT,
+                float_value REAL,
+                trade_offer_id TEXT,
+                status TEXT DEFAULT 'available',
+                created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
                 FOREIGN KEY(user_id) REFERENCES users(id)
             )`);
 
