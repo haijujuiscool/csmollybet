@@ -3549,6 +3549,181 @@ app.delete('/api/admin/transfers/:filename', authenticateToken, requireAdmin, (r
     });
 });
 
+// --- WORLD CUP GAME MODE ---
+const worldCupService = require('./worldCupService');
+worldCupService.initialize(() => {
+    // Start auto-refresh after initialization
+    worldCupService.startAutoRefresh();
+    // Run initial auto-resolution check on startup
+    checkAndResolveFinishedMatches();
+});
+
+// Helper: resolve bets for a completed match
+function resolveWorldCupBets(match) {
+    const resultOutcome = match.winner; // 'home', 'draw', 'away'
+    if (!resultOutcome) return;
+
+    db.all('SELECT * FROM world_cup_bets WHERE match_id = ? AND status = ?', [match.id, 'pending'], (err, bets) => {
+        if (err || !bets || bets.length === 0) return;
+
+        console.log(`[WorldCup] Resolving ${bets.length} bets for ${match.home} vs ${match.away} (winner: ${resultOutcome})`);
+
+        bets.forEach(bet => {
+            const won = bet.bet_type === resultOutcome;
+            const status = won ? 'won' : 'lost';
+            const payout = won ? (bet.stake * bet.odds) : 0;
+
+            db.serialize(() => {
+                db.run('BEGIN TRANSACTION');
+                db.run('UPDATE world_cup_bets SET status = ?, payout = ? WHERE id = ?', [status, payout, bet.id]);
+                if (won) {
+                    db.run('UPDATE users SET gems = gems + ? WHERE id = ?', [payout, bet.user_id]);
+                }
+                db.run('COMMIT', () => {
+                    if (won) {
+                        logBalanceChange(bet.user_id, payout, `Won World Cup bet: ${match.home} vs ${match.away}`);
+                        db.get('SELECT username FROM users WHERE id = ?', [bet.user_id], (uErr, uRow) => {
+                            if (!uErr && uRow) {
+                                if (typeof global.broadcastGameResult === 'function') {
+                                    global.broadcastGameResult(uRow.username, 'World Cup', bet.stake, payout, bet.odds);
+                                }
+                            }
+                        });
+                    } else {
+                        logBalanceChange(bet.user_id, 0, `Lost World Cup bet: ${match.home} vs ${match.away}`);
+                    }
+                });
+            });
+        });
+    });
+}
+
+// Helper: check for auto-resolved / completed matches and settle bets
+function checkAndResolveFinishedMatches() {
+    try {
+        const { newlyCompleted } = worldCupService.updateMatchStatuses();
+        if (newlyCompleted && newlyCompleted.length > 0) {
+            worldCupService.saveMatches();
+            console.log(`[WorldCup] Auto-resolving bets for ${newlyCompleted.length} matches completed in the background`);
+            newlyCompleted.forEach(match => {
+                resolveWorldCupBets(match);
+            });
+        }
+    } catch (e) {
+        console.error('[WorldCup] Auto-resolution check error:', e.message);
+    }
+}
+
+// Periodically check for auto-resolved matches from scores API
+setInterval(async () => {
+    try {
+        const resolved = await worldCupService.fetchScores();
+        for (const match of resolved) {
+            resolveWorldCupBets(match);
+        }
+    } catch (e) {}
+}, 5 * 60 * 1000); // Every 5 minutes
+
+// Periodically check for finished matches (fallback simulation resolution)
+setInterval(() => {
+    checkAndResolveFinishedMatches();
+}, 60 * 1000); // Every 1 minute
+
+app.get('/api/worldcup/matches', (req, res) => {
+    checkAndResolveFinishedMatches();
+    res.json(worldCupService.getMatches());
+});
+
+app.get('/api/worldcup/my-bets', authenticateToken, (req, res) => {
+    db.all('SELECT * FROM world_cup_bets WHERE user_id = ? ORDER BY id DESC', [req.user.id], (err, rows) => {
+        if (err) return res.status(500).json({ error: 'Failed to fetch bets' });
+        res.json(rows);
+    });
+});
+
+// Admin: manually refresh odds from API
+app.post('/api/admin/worldcup/refresh-odds', authenticateToken, async (req, res) => {
+    if (req.user.role !== 'admin') return res.status(403).json({ error: 'Forbidden' });
+    try {
+        const updated = await worldCupService.fetchRealOdds();
+        const scores = await worldCupService.fetchScores();
+        for (const match of scores) {
+            resolveWorldCupBets(match);
+        }
+        res.json({ success: true, oddsUpdated: updated, scoresResolved: scores.length });
+    } catch (e) {
+        res.status(500).json({ error: e.message });
+    }
+});
+
+app.post('/api/worldcup/bet', authenticateToken, (req, res) => {
+    const { matchId, betType, stake } = req.body;
+    const stakeNum = parseFloat(stake);
+    if (isNaN(stakeNum) || stakeNum <= 0) {
+        return res.status(400).json({ error: 'Invalid stake amount' });
+    }
+
+    const matches = worldCupService.getMatches();
+    const match = matches.find(m => m.id === matchId);
+    if (!match) return res.status(404).json({ error: 'Match not found' });
+    if (match.status !== 'upcoming') return res.status(400).json({ error: 'Match has already started or finished' });
+
+    if (!['home', 'draw', 'away'].includes(betType)) {
+        return res.status(400).json({ error: 'Invalid bet type' });
+    }
+
+    const odds = betType === 'home' ? match.homeOdds : (betType === 'draw' ? match.drawOdds : match.awayOdds);
+
+    db.get('SELECT gems, username FROM users WHERE id = ?', [req.user.id], (err, user) => {
+        if (err || !user) return res.status(500).json({ error: 'User not found' });
+        if (user.gems < stakeNum) return res.status(400).json({ error: 'Insufficient gems' });
+
+        db.serialize(() => {
+            db.run('BEGIN TRANSACTION');
+            db.run('UPDATE users SET gems = gems - ? WHERE id = ?', [stakeNum, req.user.id]);
+            db.run('INSERT INTO world_cup_bets (user_id, match_id, home_team, away_team, bet_type, odds, stake, status, payout) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
+                [req.user.id, matchId, match.home, match.away, betType, odds, stakeNum, 'pending', 0],
+                function(insertErr) {
+                    if (insertErr) {
+                        db.run('ROLLBACK');
+                        return res.status(500).json({ error: 'Failed to place bet' });
+                    }
+                    db.run('COMMIT', () => {
+                        logBalanceChange(req.user.id, -stakeNum, `Placed bet on World Cup: ${match.home} vs ${match.away} (${betType})`);
+                        wagerGems(req.user.id, stakeNum);
+                        res.json({ success: true, newGems: user.gems - stakeNum });
+                    });
+                }
+            );
+        });
+    });
+});
+
+app.post('/api/admin/worldcup/simulate', authenticateToken, (req, res) => {
+    if (req.user.role !== 'admin') {
+        return res.status(403).json({ error: 'Forbidden' });
+    }
+
+    const { matchId } = req.body;
+    const matches = worldCupService.getMatches();
+    const matchIndex = matches.findIndex(m => m.id === matchId);
+    if (matchIndex === -1) return res.status(404).json({ error: 'Match not found' });
+    if (matches[matchIndex].status === 'completed') {
+        return res.status(400).json({ error: 'Match already completed' });
+    }
+
+    const match = matches[matchIndex];
+    const outcomes = ['home', 'draw', 'away'];
+    const resultOutcome = outcomes[Math.floor(Math.random() * outcomes.length)];
+
+    match.status = 'completed';
+    match.winner = resultOutcome;
+    worldCupService.saveMatches();
+
+    resolveWorldCupBets(match);
+    res.json({ success: true, outcome: resultOutcome });
+});
+
 const PORT = 3001;
 server.listen(PORT, () => {
     console.log(`Backend server running on http://localhost:${PORT}`);

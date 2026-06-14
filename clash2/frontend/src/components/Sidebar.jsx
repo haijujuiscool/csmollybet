@@ -28,6 +28,7 @@ export default function Sidebar({ isOpen, onClose }) {
                     <Link to="/cases" className="btn-secondary" onClick={onClose}>Cases</Link>
                     <Link to="/upgrader" className="btn-secondary" onClick={onClose}>Upgrader</Link>
                     <Link to="/lotteries" className="btn-secondary" onClick={onClose}>Lotteries</Link>
+                    <Link to="/worldcup" className="btn-secondary" style={{ borderLeft: '3px solid var(--accent-gold)' }} onClick={onClose}>⚽ World Cup</Link>
                 </div>
                 <div style={{ borderTop: '1px solid #333', margin: '12px 0' }} />
                 <div className="nav-links">

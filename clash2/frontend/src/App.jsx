@@ -20,6 +20,7 @@ import Admin from './pages/Admin';
 import Terms from './pages/Terms';
 import FreeDailyCase from './pages/FreeDailyCase';
 import Inventory from './pages/Inventory';
+import WorldCup from './pages/WorldCup';
 import AgeVerificationModal from './components/AgeVerificationModal';
 import WelcomeCaseModal from './components/WelcomeCaseModal';
 import Footer from './components/Footer';
@@ -126,6 +127,7 @@ function App() {
             <Route path='/daily-case' element={<FreeDailyCase />} />
             <Route path='/inventory' element={<Inventory />} />
             <Route path='/lotteries' element={<Lotteries />} />
+            <Route path='/worldcup' element={<WorldCup />} />
           </Routes>
         </div>
         <Footer />

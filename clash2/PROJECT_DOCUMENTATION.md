@@ -14,14 +14,17 @@ Diese Dokumentation fasst den aktuellen Stand des Projekts zusammen, damit in ei
 - `frontend/src/components/Chat.jsx`: Chat-Sidebar mit Live Chat und **Live Game Feed** (Toggle zwischen beiden Views).
 - `frontend/src/components/LiveGamesFeed.jsx`: Live Game Feed mit All/Top-Filter und Steam-Avatar-Anzeige, klickbare Items navigieren zur Spiel-Route.
 - `frontend/src/components/RouletteSpinner.jsx`: Roulette-Spinner-Animation für Case Openings (mit Mythic-Spin Support).
-- `frontend/src/components/Navbar.jsx`: Navbar mit Brand "CSMOLLY", Games-Dropdown, Balance-Anzeige, Daily/Deposit/Profile-Buttons, User-Dropdown (Desktop + Mobile).
+- `frontend/src/components/Navbar.jsx`: Navbar mit Brand "CSMOLLY", Games-Dropdown (incl. World Cup with Trophy icon), Balance-Anzeige, Daily/Deposit/Profile-Buttons, User-Dropdown (Desktop + Mobile).
 - `backend/server.js`: Hauptserver, API-Endpunkte, SQLite-Queries, `broadcastGameResult()`-Funktion für den Game Feed.
 - `backend/battleEngine.js`: Externe Logik für Case Battles (Lobby, Timer, Bot-Logik, Game Feed Broadcast).
 - `backend/chatEngine.js`: Socket.io Chat + Game Feed History Emission bei Verbindung.
 - `backend/admin.js`: CLI-Tool für Admin-Aufgaben (z.B. Gems vergeben: `node admin.js add-gems Username 1000`).
 - `backend/lotteryEngine.js`: Single global lottery with socket events (get_lottery, join_lottery, lottery_tick/100ms, lottery_rolling spinner, lottery_finished). Weighted roll by item value.
+- `backend/worldCupService.js`: World Cup 2026 match data, real odds (The Odds API), real-time scores (wcup2026.org API), auto-refresh every 1 minute.
+- `backend/worldcup_matches.json`: Cached match data with scores, odds, and status.
 - `frontend/src/index.css`: Globales Styling inkl. responsive Breakpoints (mobile/tablet ≤1280px, tablet 769–1280px, desktop ≥1281px).
 - `frontend/src/pages/FreeDailyCase.jsx`: Täglicher Free Case mit Steam-Anforderungsprüfung, Welcome Cases, Transfer-Image-Overlay.
+- `frontend/src/pages/WorldCup.jsx`: World Cup betting page with match cards, odds buttons, bet slip, live scores, desktop background, mobile-responsive stacking.
 - `frontend/src/pages/Terms.jsx`: Terms of Service und Privacy Policy mit Tab-Toggle.
 
 ## 🎮 Implementierte Spielmodi
@@ -41,6 +44,16 @@ Diese Dokumentation fasst den aktuellen Stand des Projekts zusammen, damit in ei
 11. **Slots (Deaktiviert):** Derzeit im Navigations-Menü deaktiviert.
 12. **Kalshi Bets (Deaktiviert):** Vorhersagemärkte basierend auf der Kalshi-API. (Aktuell deaktiviert, um Leistung zu sparen und den Netzwerk-Workload zu minimieren).
 13. **Lottery:** Single global lottery (not user-created). Players join by depositing items from `user_inventories`. When ≥2 players joined, a 30s timer starts (ticks every 100ms for smooth countdown). Weighted roll by item value — higher value = higher odds. Winner takes all items. Spinning animation with profile picture carousel (rapid cycling, decelerates, snaps to winner).
+14. **World Cup 2026 Betting:** Real-time sports betting on FIFA World Cup 2026 matches. Features:
+    - **Real match data** from `thestatsapi.com` (initial fixtures) + real-time scores from `wcup2026.org/api/data.php`.
+    - **Real odds** from The Odds API (free tier, 500 req/month) with fallback to strength-based synthetic odds.
+    - **Match lifecycle:** `upcoming` → `closed` (kicked off, no more bets) → `completed` (finished, bets resolved).
+    - **Auto-refresh** every 1 minute: fetches latest odds + scores, auto-resolves finished matches, settles winning bets.
+    - **Bet types:** Home win, Draw, Away win — standard 1X2 market with decimal odds.
+    - **Admin controls:** Manual simulate result, force refresh odds.
+    - **Desktop background:** Static fixed admin-uploaded image (`/transfers/A8D32192-...png`), hidden on mobile.
+    - **Mobile responsive:** Match cards stack vertically, odds buttons go single-column on small screens.
+    - **Lucide React Trophy icon** in Navbar dropdown, Sidebar, and Home page game grid.
 
 ## 💬 Chat-System & Live Game Feed
 
@@ -150,6 +163,45 @@ global.broadcastGameResult = (username, gameName, betAmount, payoutAmount, multi
 |-------|----------|-------------|
 | `game_feed_history` | Server → Client | Array der letzten 20 Ergebnisse bei Verbindung |
 | `game_feed_update` | Server → Client | Einzelnes neues Ergebnis (wird mit 5s Delay im Frontend angezeigt) |
+
+## ⚽ World Cup 2026 Betting Architecture
+
+### Backend Service (`worldCupService.js`)
+- **Initialization:** On startup, loads cached matches from `worldcup_matches.json`. If no cache exists, fetches fixtures from `thestatsapi.com/world-cup/data/fixtures.json`.
+- **Odds source priority:** Real odds from The Odds API (`soccer_fifa_world_cup` sport key) > fallback strength-based odds.
+- **Score source:** `wcup2026.org/api/data.php?action=all` — provides live scores, match status (`upcoming`/`live`/`finished`), and elapsed minutes for all 104 WC matches.
+- **Team name normalization:** `TEAM_ALIASES` map handles naming differences between APIs (e.g. "South Korea" → "Korea Republic", "USA" → "United States", "Ivory Coast" → "Cote d'Ivoire", "Czech Republic" → "Czechia", "Turkey" → "Turkiye", "Curaçao" → "Curacao", "Bosnia & Herzegovina" → "Bosnia and Herzegovina").
+- **Winner recalculation:** Always recalculates `match.winner` from actual scores (`homeScore` vs `awayScore`), even for already-completed matches. This prevents stale/incorrect winners from cached data.
+- **Auto-refresh interval:** 1 minute (`ODDS_REFRESH_INTERVAL`). Fetches odds + scores, persists changes to `worldcup_matches.json`.
+
+### API Endpoints (in `server.js`)
+| Method | Endpoint | Auth | Description |
+|--------|----------|------|-------------|
+| GET | `/api/worldcup/matches` | No | Returns all matches with current odds, scores, status |
+| POST | `/api/worldcup/bet` | JWT | Place a bet (matchId, betType, stake) |
+| GET | `/api/worldcup/my-bets` | JWT | List user's World Cup bets |
+| POST | `/api/admin/worldcup/simulate` | Admin | Manually simulate a match result |
+| POST | `/api/admin/worldcup/refresh-odds` | Admin | Force re-fetch odds and scores |
+
+### Database (`worldcup_bets` table)
+```sql
+CREATE TABLE worldcup_bets (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  user_id INTEGER, match_id TEXT, bet_type TEXT,
+  odds REAL, stake REAL, status TEXT DEFAULT 'pending',
+  payout REAL DEFAULT 0, created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+```
+- **Status flow:** `pending` → `won` (payout = stake × odds) or `lost` (payout = 0).
+- Bets are auto-resolved when `fetchScores()` detects a match transition to `completed`.
+
+### Frontend (`WorldCup.jsx`)
+- **Match cards:** Show team flags (emoji), team names, scores (for live/completed), odds buttons, status badge.
+- **Bet slip:** Right sidebar (desktop) with selection, odds, stake input, potential payout calculation.
+- **Filters:** Open / In Progress / Completed / All — with count badges.
+- **Desktop background:** Fixed `background-attachment: fixed` image via `.worldcup-container-bg` div, hidden via `@media (max-width: 768px)`.
+- **Mobile stacking:** `@media (max-width: 600px)` overrides grid to single column for teams and odds.
+- **Auto-refresh:** Frontend polls `/api/worldcup/matches` every 15 seconds.
 
 ## 🚫 Deaktivierte Features (Kalshi Bets)
 

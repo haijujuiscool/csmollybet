@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { Link } from 'react-router-dom';
 import { io } from 'socket.io-client';
-import { Dices } from 'lucide-react';
+import { Dices, Trophy } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import sounds from '../utils/sounds';
 
@@ -23,6 +23,7 @@ export default function Home() {
     const [lotterySnap, setLotterySnap] = useState(false);
     const [lotteryWheelOff, setLotteryWheelOff] = useState(0);
     const [lotteryRevealed, setLotteryRevealed] = useState(null);
+    const lotteryAnimateRef = useRef(null);
 
     useEffect(() => {
         const s = io(undefined, {
@@ -39,43 +40,92 @@ export default function Home() {
             setLotteryTime(timeLeft);
         });
         s.on('lottery_rolling', (data) => {
+            if (lotteryAnimateRef.current) {
+                cancelAnimationFrame(lotteryAnimateRef.current);
+            }
+
             const items = [];
             for (let i = 0; i < 81; i++) {
                 const p = data.participants[Math.floor(Math.random() * data.participants.length)];
                 items.push({ avatar: p.avatar || '', username: p.username, isWinner: false });
             }
             items[80] = { avatar: data.winnerEntry.avatar || '', username: data.winnerEntry.username, isWinner: true };
+
+            const ITEM_WIDTH = 60;
+            const GAP = 8;
+            const PADDING = 8;
+            const getCenterOffset = (index) => PADDING + (index * (ITEM_WIDTH + GAP)) + (ITEM_WIDTH / 2);
+            const INITIAL_INDEX = 40;
+            const TARGET_INDEX = 80;
+
             setLotteryWheel(items);
             setLotteryTime(null);
             setLotteryRevealed(null);
-            setLotteryAnimating(false);
+            setLotteryAnimating(true);
             setLotterySnap(false);
-            setLotteryWheelOff(3215);
+            setLotteryWheelOff(getCenterOffset(INITIAL_INDEX));
 
             setTimeout(() => {
-                setLotteryAnimating(true);
                 sounds.spinStart();
-                const jitter = Math.floor(Math.random() * 60) - 30;
-                setLotteryWheelOff(6415 + jitter);
+                const startTime = performance.now();
+                const duration = 4400; // 4.4 seconds
+                const startOffset = getCenterOffset(INITIAL_INDEX);
+                const randomJitter = Math.floor(Math.random() * (ITEM_WIDTH - 15)) - ((ITEM_WIDTH - 15) / 2);
+                const endOffset = getCenterOffset(TARGET_INDEX) + randomJitter;
+
+                const easeOutQuint = (t) => 1 - Math.pow(1 - t, 5);
+                let lastTickIndex = -1;
+
+                const animate = (now) => {
+                    const elapsed = now - startTime;
+                    const progress = Math.min(elapsed / duration, 1);
+                    const eased = easeOutQuint(progress);
+                    const currentOffset = startOffset + (endOffset - startOffset) * eased;
+
+                    setLotteryWheelOff(currentOffset);
+
+                    // Ticking logic
+                    const currentCenterIndex = Math.floor((currentOffset - PADDING) / (ITEM_WIDTH + GAP));
+                    if (currentCenterIndex !== lastTickIndex) {
+                        lastTickIndex = currentCenterIndex;
+                        if (currentCenterIndex >= INITIAL_INDEX && currentCenterIndex <= TARGET_INDEX) {
+                            sounds.tick(800 - progress * 400);
+                        }
+                    }
+
+                    if (progress < 1) {
+                        lotteryAnimateRef.current = requestAnimationFrame(animate);
+                    } else {
+                        setLotterySnap(true);
+                        setLotteryWheelOff(getCenterOffset(TARGET_INDEX));
+                        
+                        setTimeout(() => {
+                            setLotteryRevealed(data.winnerEntry);
+                            sounds.tick(900);
+                        }, 200);
+                    }
+                };
+
+                lotteryAnimateRef.current = requestAnimationFrame(animate);
             }, 50);
-
-            setTimeout(() => {
-                setLotterySnap(true);
-                setLotteryWheelOff(6415);
-            }, 4700);
-
-            setTimeout(() => {
-                setLotteryRevealed(data.winnerEntry);
-                sounds.tick(900);
-            }, 4500);
         });
         s.on('lottery_finished', (result) => {
+            if (lotteryAnimateRef.current) {
+                cancelAnimationFrame(lotteryAnimateRef.current);
+            }
             setLotteryWinner(result);
             setLotteryWheel([]);
             setLotteryRevealed(null);
+            setLotteryAnimating(false);
+            setLotterySnap(false);
             setTimeout(() => setLotteryWinner(null), 8000);
         });
-        return () => s.disconnect();
+        return () => {
+            if (lotteryAnimateRef.current) {
+                cancelAnimationFrame(lotteryAnimateRef.current);
+            }
+            s.disconnect();
+        };
     }, []);
 
     const games = [
@@ -85,7 +135,8 @@ export default function Home() {
         { name: 'Battles', path: '/battles', icon: battlesIcon, desc: 'Battle other players or bots in case openings', color: '#FF6B35' },
         { name: 'Cases', path: '/cases', icon: casesIcon, desc: 'Open custom cases and win big skins', color: '#607D8B' },
         { name: 'Upgrader', path: '/upgrader', icon: upgraderIcon, desc: 'Upgrade your items for high tier skins', color: '#FFEB3B' },
-        { name: 'Lotteries', path: '/lotteries', icon: null, desc: 'Pool items and win the whole pot', color: '#9C27B0' }
+        { name: 'Lotteries', path: '/lotteries', icon: null, desc: 'Pool items and win the whole pot', color: '#9C27B0' },
+        { name: 'World Cup', path: '/worldcup', icon: null, lucideIcon: Trophy, desc: 'Bet on real World Cup matches and win gems', color: '#FFD700' }
     ];
     const lotteryEntry = lottery?.entries || [];
     const isActive = lottery?.status === 'active';
@@ -216,43 +267,95 @@ export default function Home() {
                                 </div>
                             </div>
                         ) : (lotteryRevealed || lotteryAnimating) && lotteryWheel.length > 0 ? (
-                            <div style={{ padding: '12px' }}>
+                            <div style={{ padding: '12px', background: 'rgba(0, 0, 0, 0.15)', borderRadius: '12px', border: '1px solid rgba(255, 107, 53, 0.15)' }}>
                                 <div style={{ textAlign: 'center', marginBottom: '8px' }}>
-                                    <span style={{ color: 'var(--accent-gold)', fontWeight: 'bold', fontSize: '14px' }}>
-                                        {lotteryRevealed ? `Winner: ${lotteryRevealed.username}` : 'Rolling...'}
+                                    <span style={{ 
+                                        background: lotteryRevealed ? 'linear-gradient(135deg, #FF6B35 0%, #FFB347 100%)' : '#aaa',
+                                        WebkitBackgroundClip: lotteryRevealed ? 'text' : 'none',
+                                        WebkitTextFillColor: lotteryRevealed ? 'transparent' : 'initial',
+                                        fontWeight: '900', 
+                                        fontSize: '14px',
+                                        letterSpacing: '0.5px'
+                                    }}>
+                                        {lotteryRevealed ? `Winner: ${lotteryRevealed.username}` : 'DETERMINING WINNER...'}
                                     </span>
                                 </div>
-                                <div style={{ width: '100%', height: '70px', position: 'relative' }}>
+                                <div style={{ width: '100%', height: '80px', position: 'relative', overflow: 'hidden', borderRadius: '8px', background: 'rgba(0, 0, 0, 0.2)' }}>
+                                    {/* Fading side masks for deep portal effect */}
+                                    <div className="home-spinner-fade-left" />
+                                    <div className="home-spinner-fade-right" />
+
+                                    {/* Neon Center Pointer Line */}
                                     <div style={{
                                         position: 'absolute', left: '50%', top: 0, bottom: 0, width: '3px',
-                                        backgroundColor: lotteryRevealed ? 'var(--accent-gold)' : '#fff',
+                                        backgroundColor: lotteryRevealed ? '#FF6B35' : '#fff',
                                         transform: 'translateX(-50%)', zIndex: 10,
-                                        boxShadow: lotteryRevealed ? '0 0 15px rgba(255,215,0,0.5)' : '0 0 8px rgba(255,255,255,0.5)'
+                                        boxShadow: lotteryRevealed ? '0 0 10px #FF6B35, 0 0 20px #FF6B35' : '0 0 8px rgba(255,255,255,0.5)',
+                                        transition: 'all 0.5s'
+                                    }} />
+                                    {/* Triangles */}
+                                    <div style={{
+                                        position: 'absolute', left: '50%', top: 0, width: 0, height: 0, 
+                                        borderStyle: 'solid', borderWidth: '6px 5px 0 5px', 
+                                        borderColor: (lotteryRevealed ? '#FF6B35' : '#fff') + ' transparent transparent transparent', 
+                                        transform: 'translateX(-50%)', zIndex: 11,
+                                        transition: 'border-color 0.5s'
                                     }} />
                                     <div style={{
-                                        display: 'flex', gap: '8px', padding: '8px',
+                                        position: 'absolute', left: '50%', bottom: 0, width: 0, height: 0, 
+                                        borderStyle: 'solid', borderWidth: '0 5px 6px 5px', 
+                                        borderColor: 'transparent transparent ' + (lotteryRevealed ? '#FF6B35' : '#fff') + ' transparent', 
+                                        transform: 'translateX(-50%)', zIndex: 11,
+                                        transition: 'border-color 0.5s'
+                                    }} />
+
+                                    {/* Carousel */}
+                                    <div style={{
+                                        display: 'flex', gap: '8px', padding: '0 8px',
                                         height: '100%',
+                                        alignItems: 'center',
                                         transform: `translateX(calc(50% - ${lotteryWheelOff}px))`,
                                         transition: lotterySnap
                                             ? 'transform 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.275)'
-                                            : (lotteryAnimating ? 'transform 4.5s cubic-bezier(0.1, 0.7, 0.1, 1)' : 'none'),
+                                            : 'none',
                                         willChange: 'transform'
                                     }}>
-                                        {lotteryWheel.map((entry, i) => (
-                                            <div key={i} style={{
-                                                minWidth: '60px', height: '100%',
-                                                display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0
-                                            }}>
-                                                <img src={entry.avatar || `https://api.dicebear.com/7.x/initials/svg?seed=${entry.username}`}
-                                                     alt="" style={{
-                                                         width: '44px', height: '44px', borderRadius: '50%',
-                                                         objectFit: 'cover',
-                                                         border: entry.isWinner && lotteryRevealed ? '3px solid var(--accent-gold)' : '2px solid #444',
-                                                         boxShadow: entry.isWinner && lotteryRevealed ? '0 0 12px rgba(255,215,0,0.4)' : 'none',
-                                                         transition: 'border 0.3s, box-shadow 0.3s'
-                                                     }} />
-                                            </div>
-                                        ))}
+                                        {lotteryWheel.map((entry, i) => {
+                                            const isTargetWinner = entry.isWinner && lotteryRevealed;
+                                            return (
+                                                <div key={i} style={{
+                                                    minWidth: '60px', 
+                                                    height: '64px',
+                                                    display: 'flex', 
+                                                    alignItems: 'center', 
+                                                    justifyContent: 'center', 
+                                                    flexShrink: 0,
+                                                    borderRadius: '8px',
+                                                    background: isTargetWinner 
+                                                        ? 'rgba(255, 107, 53, 0.12)' 
+                                                        : 'rgba(255, 255, 255, 0.02)',
+                                                    border: isTargetWinner 
+                                                        ? '1.5px solid #FF6B35' 
+                                                        : '1px solid rgba(255, 255, 255, 0.05)',
+                                                    boxShadow: isTargetWinner 
+                                                        ? '0 0 15px rgba(255, 107, 53, 0.35)' 
+                                                        : 'none',
+                                                    transform: isTargetWinner ? 'scale(1.1)' : 'scale(1)',
+                                                    transition: 'all 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275)'
+                                                }}>
+                                                    <img src={entry.avatar || `https://api.dicebear.com/7.x/initials/svg?seed=${entry.username}`}
+                                                         alt="" style={{
+                                                             width: '42px', 
+                                                             height: '42px', 
+                                                             borderRadius: '50%',
+                                                             objectFit: 'cover',
+                                                             border: isTargetWinner ? '2px solid #FF6B35' : '1.5px solid rgba(255, 255, 255, 0.2)',
+                                                             boxShadow: isTargetWinner ? '0 0 8px rgba(255, 107, 53, 0.5)' : 'none',
+                                                             transition: 'border 0.3s, box-shadow 0.3s'
+                                                         }} />
+                                                </div>
+                                            );
+                                        })}
                                     </div>
                                 </div>
                             </div>
@@ -363,6 +466,8 @@ export default function Home() {
                             <div style={{ marginBottom: '12px' }}>
                                 {g.icon ? (
                                     <img src={g.icon} alt={g.name} style={{ width: '48px', height: '48px', objectFit: 'contain' }} />
+                                ) : g.lucideIcon ? (
+                                    <g.lucideIcon size={44} color={g.color} />
                                 ) : (
                                     <Dices size={44} color="#fff" />
                                 )}

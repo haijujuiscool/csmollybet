@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { Link } from 'react-router-dom';
-import { Gem, LogOut, Menu, Settings, User, WalletCards, Gift, Package, Shield, Dices } from 'lucide-react';
+import { Gem, LogOut, Menu, Settings, User, WalletCards, Gift, Package, Shield, Dices, Trophy } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import DepositWithdrawModal from './DepositWithdrawModal';
 
@@ -62,7 +62,8 @@ export default function Navbar({ onToggleSidebar }) {
         { path: '/battles', label: 'Battles', icon: battlesIcon },
         { path: '/cases', label: 'Cases', icon: casesIcon },
         { path: '/upgrader', label: 'Upgrader', icon: upgraderIcon },
-        { path: '/lotteries', label: 'Lotteries', icon: null }
+        { path: '/lotteries', label: 'Lotteries', icon: null },
+        { path: '/worldcup', label: 'World Cup', icon: null, lucideIcon: Trophy }
     ];
 
 
@@ -138,7 +139,7 @@ export default function Navbar({ onToggleSidebar }) {
                                         {link.icon ? (
                                             <img src={link.icon} alt={link.label} style={{ width: '20px', height: '20px', objectFit: 'contain' }} />
                                         ) : (
-                                            <Dices size={20} />
+                                            link.lucideIcon ? <link.lucideIcon size={20} /> : <Dices size={20} />
                                         )}
                                         <span>{link.label}</span>
                                     </Link>

@@ -20,6 +20,7 @@ export default function Lotteries() {
     const [revealedWinner, setRevealedWinner] = useState(null);
     const phaseRef = useRef('idle');
     const socketRef = useRef(null);
+    const animateRef = useRef(null);
 
     const ITEM_WIDTH = 70;
     const GAP = 10;
@@ -28,10 +29,27 @@ export default function Lotteries() {
     const INITIAL_INDEX = 40;
     const TARGET_INDEX = 80;
 
+    const getWeightedParticipant = (participants) => {
+        const total = participants.reduce((sum, p) => sum + (p.total_value || 0), 0);
+        if (total <= 0) {
+            return participants[Math.floor(Math.random() * participants.length)];
+        }
+        const rand = Math.random() * total;
+        let cumulative = 0;
+        for (const p of participants) {
+            cumulative += p.total_value || 0;
+            if (rand <= cumulative) {
+                return p;
+            }
+        }
+        return participants[participants.length - 1];
+    };
+
     const generateWheel = (participants, winnerEntry) => {
         const items = [];
-        for (let i = 0; i < TARGET_INDEX + 1; i++) {
-            const p = participants[Math.floor(Math.random() * participants.length)];
+        const totalItemsCount = TARGET_INDEX + 30; // 30 items to the right of the winner
+        for (let i = 0; i < totalItemsCount; i++) {
+            const p = getWeightedParticipant(participants);
             items.push({ avatar: p.avatar || '', username: p.username, isWinner: false });
         }
         items[TARGET_INDEX] = { avatar: winnerEntry.avatar || '', username: winnerEntry.username, isWinner: true };
@@ -58,43 +76,84 @@ export default function Lotteries() {
         });
 
         s.on('lottery_rolling', (data) => {
+            if (animateRef.current) {
+                cancelAnimationFrame(animateRef.current);
+            }
+
             const wheel = generateWheel(data.participants, data.winnerEntry);
             setWheelItems(wheel);
             setTimeLeft(null);
             setRevealedWinner(null);
             phaseRef.current = 'rolling';
 
-            setIsAnimating(false);
+            setIsAnimating(true);
             setSnapToCenter(false);
             setWheelOffset(getCenterOffset(INITIAL_INDEX));
 
             setTimeout(() => {
-                setIsAnimating(true);
                 sounds.spinStart();
-                const randomJitter = Math.floor(Math.random() * (ITEM_WIDTH - 10)) - ((ITEM_WIDTH - 10) / 2);
-                setWheelOffset(getCenterOffset(TARGET_INDEX) + randomJitter);
+                const startTime = performance.now();
+                const duration = 6000; // spin for 6.0 seconds (slower ending)
+                const startOffset = getCenterOffset(INITIAL_INDEX);
+                const randomJitter = Math.floor(Math.random() * (ITEM_WIDTH - 15)) - ((ITEM_WIDTH - 15) / 2);
+                const endOffset = getCenterOffset(TARGET_INDEX) + randomJitter;
+
+                const easeOutQuint = (t) => 1 - Math.pow(1 - t, 5);
+                let lastTickIndex = -1;
+
+                const animate = (now) => {
+                    const elapsed = now - startTime;
+                    const progress = Math.min(elapsed / duration, 1);
+                    const eased = easeOutQuint(progress);
+                    const currentOffset = startOffset + (endOffset - startOffset) * eased;
+
+                    setWheelOffset(currentOffset);
+
+                    // Ticking logic
+                    const currentCenterIndex = Math.floor((currentOffset - PADDING) / (ITEM_WIDTH + GAP));
+                    if (currentCenterIndex !== lastTickIndex) {
+                        lastTickIndex = currentCenterIndex;
+                        if (currentCenterIndex >= INITIAL_INDEX && currentCenterIndex <= TARGET_INDEX) {
+                            sounds.tick(800 - progress * 400);
+                        }
+                    }
+
+                    if (progress < 1) {
+                        animateRef.current = requestAnimationFrame(animate);
+                    } else {
+                        setSnapToCenter(true);
+                        setWheelOffset(getCenterOffset(TARGET_INDEX));
+                        
+                        setTimeout(() => {
+                            setRevealedWinner(data.winnerEntry);
+                            sounds.tick(900);
+                        }, 200);
+                    }
+                };
+
+                animateRef.current = requestAnimationFrame(animate);
             }, 50);
-
-            setTimeout(() => {
-                setSnapToCenter(true);
-                setWheelOffset(getCenterOffset(TARGET_INDEX));
-            }, 4700);
-
-            setTimeout(() => {
-                setRevealedWinner(data.winnerEntry);
-                sounds.tick(900);
-            }, 4500);
         });
 
         s.on('lottery_finished', (result) => {
+            if (animateRef.current) {
+                cancelAnimationFrame(animateRef.current);
+            }
             setWinner(result);
             setWheelItems([]);
             setRevealedWinner(null);
+            setIsAnimating(false);
+            setSnapToCenter(false);
             phaseRef.current = 'idle';
             setTimeout(() => setWinner(null), 8000);
         });
 
-        return () => s.disconnect();
+        return () => {
+            if (animateRef.current) {
+                cancelAnimationFrame(animateRef.current);
+            }
+            s.disconnect();
+        };
     }, []);
 
     const fetchInventory = () => {
@@ -143,7 +202,7 @@ export default function Lotteries() {
     const hasJoined = user && entries.find(e => e.user_id === user.id);
 
     return (
-        <div style={{ padding: '20px', maxWidth: '800px', margin: '0 auto' }}>
+        <div className="lottery-container">
             <h1 style={{ color: 'var(--accent-gold)', textAlign: 'center', marginBottom: '24px' }}>LOTTERY</h1>
 
             {winner ? (
@@ -178,51 +237,115 @@ export default function Lotteries() {
                 </div>
             ) : revealedWinner || isAnimating ? (
                 <div style={{
-                    backgroundColor: '#1e1e1e', borderRadius: '12px',
-                    border: '2px solid var(--accent-gold)', overflow: 'hidden'
+                    background: 'linear-gradient(180deg, #18181b 0%, #09090b 100%)',
+                    borderRadius: '16px',
+                    border: '1px solid rgba(255, 107, 53, 0.25)',
+                    boxShadow: '0 8px 32px rgba(0, 0, 0, 0.4)',
+                    overflow: 'hidden',
+                    position: 'relative'
                 }}>
-                    <div style={{ padding: '20px', textAlign: 'center', borderBottom: '1px solid #333' }}>
-                        <span style={{ color: 'var(--accent-gold)', fontWeight: 'bold', fontSize: '18px' }}>
-                            {revealedWinner ? `WINNER: ${revealedWinner.username}` : 'Rolling...'}
+                    <div style={{ 
+                        padding: '16px 20px', 
+                        textAlign: 'center', 
+                        borderBottom: '1px solid rgba(255, 255, 255, 0.05)',
+                        background: 'rgba(255, 255, 255, 0.01)'
+                    }}>
+                        <span style={{ 
+                            background: revealedWinner ? 'linear-gradient(135deg, #FF6B35 0%, #FFB347 100%)' : '#aaa',
+                            WebkitBackgroundClip: revealedWinner ? 'text' : 'none',
+                            WebkitTextFillColor: revealedWinner ? 'transparent' : 'initial',
+                            fontWeight: '900', 
+                            fontSize: '18px',
+                            letterSpacing: '1px',
+                            textShadow: revealedWinner ? '0 0 15px rgba(255,107,53,0.3)' : 'none'
+                        }}>
+                            {revealedWinner ? `WINNER: ${revealedWinner.username}` : 'DETERMINING WINNER...'}
                         </span>
                     </div>
+
                     <div style={{
-                        width: '100%', height: '100px', position: 'relative',
-                        background: revealedWinner ? 'rgba(255,215,0,0.05)' : 'transparent'
+                        width: '100%', 
+                        height: '120px', 
+                        position: 'relative',
+                        background: revealedWinner ? 'rgba(255,107,53,0.02)' : 'transparent',
+                        overflow: 'hidden'
                     }}>
+                        {/* Fading side masks for deep portal effect */}
+                        <div className="spinner-fade-left" />
+                        <div className="spinner-fade-right" />
+
+                        {/* Neon Center Pointer Line */}
                         <div style={{
-                            position: 'absolute', left: '50%', top: 0, bottom: 0, width: '4px',
-                            backgroundColor: revealedWinner ? 'var(--accent-gold)' : '#fff',
+                            position: 'absolute', left: '50%', top: 0, bottom: 0, width: '3px',
+                            backgroundColor: revealedWinner ? '#FF6B35' : '#fff',
                             transform: 'translateX(-50%)', zIndex: 10,
-                            boxShadow: revealedWinner ? '0 0 20px rgba(255,215,0,0.5)' : '0 0 10px rgba(255,255,255,0.5)',
+                            boxShadow: revealedWinner ? '0 0 15px #FF6B35, 0 0 30px #FF6B35' : '0 0 8px rgba(255,255,255,0.5)',
                             transition: 'all 0.5s'
                         }} />
+                        {/* Little pointer triangles */}
                         <div style={{
-                            display: 'flex', gap: `${GAP}px`, padding: `${PADDING}px`,
+                            position: 'absolute', left: '50%', top: 0, width: 0, height: 0, 
+                            borderStyle: 'solid', borderWidth: '8px 6px 0 6px', 
+                            borderColor: (revealedWinner ? '#FF6B35' : '#fff') + ' transparent transparent transparent', 
+                            transform: 'translateX(-50%)', zIndex: 11,
+                            transition: 'border-color 0.5s'
+                        }} />
+                        <div style={{
+                            position: 'absolute', left: '50%', bottom: 0, width: 0, height: 0, 
+                            borderStyle: 'solid', borderWidth: '0 6px 8px 6px', 
+                            borderColor: 'transparent transparent ' + (revealedWinner ? '#FF6B35' : '#fff') + ' transparent', 
+                            transform: 'translateX(-50%)', zIndex: 11,
+                            transition: 'border-color 0.5s'
+                        }} />
+
+                        {/* Spinner Carousel */}
+                        <div style={{
+                            display: 'flex', gap: `${GAP}px`, padding: `0 ${PADDING}px`,
                             height: '100%',
+                            alignItems: 'center',
                             transform: `translateX(calc(50% - ${wheelOffset}px))`,
                             transition: snapToCenter
                                 ? 'transform 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.275)'
-                                : (isAnimating ? 'transform 4.5s cubic-bezier(0.1, 0.7, 0.1, 1)' : 'none'),
+                                : 'none',
                             willChange: 'transform'
                         }}>
-                            {wheelItems.map((entry, i) => (
-                                <div key={i} style={{
-                                    minWidth: `${ITEM_WIDTH}px`, height: '100%',
-                                    display: 'flex', flexDirection: 'column',
-                                    alignItems: 'center', justifyContent: 'center',
-                                    flexShrink: 0
-                                }}>
-                                    <img src={entry.avatar || `https://api.dicebear.com/7.x/initials/svg?seed=${entry.username}`}
-                                         alt="" style={{
-                                             width: '50px', height: '50px', borderRadius: '50%',
-                                             objectFit: 'cover',
-                                             border: entry.isWinner && revealedWinner ? '3px solid var(--accent-gold)' : '2px solid #444',
-                                             boxShadow: entry.isWinner && revealedWinner ? '0 0 15px rgba(255,215,0,0.4)' : 'none',
-                                             transition: 'border 0.3s, box-shadow 0.3s'
-                                         }} />
-                                </div>
-                            ))}
+                            {wheelItems.map((entry, i) => {
+                                const isTargetWinner = entry.isWinner && revealedWinner;
+                                return (
+                                    <div key={i} style={{
+                                        minWidth: `${ITEM_WIDTH}px`, 
+                                        height: '90px',
+                                        display: 'flex', 
+                                        flexDirection: 'column',
+                                        alignItems: 'center', 
+                                        justifyContent: 'center',
+                                        flexShrink: 0,
+                                        borderRadius: '12px',
+                                        background: isTargetWinner 
+                                            ? 'rgba(255, 107, 53, 0.12)' 
+                                            : 'rgba(255, 255, 255, 0.02)',
+                                        border: isTargetWinner 
+                                            ? '1.5px solid #FF6B35' 
+                                            : '1px solid rgba(255, 255, 255, 0.05)',
+                                        boxShadow: isTargetWinner 
+                                            ? '0 0 20px rgba(255, 107, 53, 0.35)' 
+                                            : 'none',
+                                        transform: isTargetWinner ? 'scale(1.12)' : 'scale(1)',
+                                        transition: 'all 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275)'
+                                    }}>
+                                        <img src={entry.avatar || `https://api.dicebear.com/7.x/initials/svg?seed=${entry.username}`}
+                                             alt="" style={{
+                                                 width: '54px', 
+                                                 height: '54px', 
+                                                 borderRadius: '50%',
+                                                 objectFit: 'cover',
+                                                 border: isTargetWinner ? '2px solid #FF6B35' : '1.5px solid rgba(255, 255, 255, 0.2)',
+                                                 boxShadow: isTargetWinner ? '0 0 10px rgba(255, 107, 53, 0.5)' : 'none',
+                                                 transition: 'border 0.3s, box-shadow 0.3s'
+                                             }} />
+                                    </div>
+                                );
+                            })}
                         </div>
                     </div>
                 </div>
@@ -270,13 +393,9 @@ export default function Lotteries() {
                                                 {e.total_value?.toFixed(2) || '0.00'} Gems
                                             </span>
                                         </div>
-                                        <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                                        <div className="lottery-items-scroll">
                                             {(e.items || []).map((item, j) => (
-                                                <div key={j} style={{
-                                                    display: 'flex', alignItems: 'center', gap: '6px',
-                                                    backgroundColor: '#1a1a1a', padding: '4px 8px', borderRadius: '6px',
-                                                    border: '1px solid #2a2a2a'
-                                                }}>
+                                                <div key={j} className="lottery-item-card">
                                                     <img src={item.image_url} alt={item.item_name}
                                                          style={{ width: '28px', height: '28px', objectFit: 'contain' }} />
                                                     <div style={{ fontSize: '11px', lineHeight: '1.2' }}>
@@ -327,25 +446,24 @@ export default function Lotteries() {
                         {inventory.length === 0 ? (
                             <div style={{ color: '#666', textAlign: 'center', padding: '20px' }}>No available items.</div>
                         ) : (
-                            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginBottom: '16px' }}>
+                            <div className="inventory-selection-grid">
                                 {inventory.map(item => {
                                     const sel = selectedItems.find(i => i.id === item.id);
                                     return (
                                         <div key={item.id} onClick={() => toggleItem(item)}
-                                             style={{
-                                                 display: 'flex', alignItems: 'center', gap: '10px', padding: '8px',
-                                                 backgroundColor: sel ? '#2a2a2a' : '#0a0a0a', borderRadius: '4px',
-                                                 cursor: 'pointer', border: sel ? '1px solid var(--accent-gold)' : '1px solid transparent'
-                                             }}>
-                                            <img src={item.image_url} alt={item.item_name} style={{ width: '40px', height: '40px', objectFit: 'contain' }} />
-                                            <div style={{ flex: 1, minWidth: 0 }}>
-                                                <div style={{ fontSize: '13px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{item.item_name}</div>
-                                                <div style={{ fontSize: '11px', color: '#888' }}>
-                                                    {item.float_value ? `${item.float_value.toFixed(4)} | ` : ''}
-                                                    <span style={{ color: 'var(--accent-gold)' }}>{item.item_value.toFixed(2)} Gems</span>
-                                                </div>
+                                             className={`inventory-selection-card ${sel ? 'selected' : ''}`}>
+                                            <div style={{ position: 'relative', width: '100%', aspectRatio: '1', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,0.2)', borderRadius: '6px', marginBottom: '6px' }}>
+                                                <img src={item.image_url} alt={item.item_name} style={{ width: '85%', height: '85%', objectFit: 'contain' }} />
+                                                {sel && (
+                                                    <div style={{ position: 'absolute', top: '4px', right: '4px', backgroundColor: 'var(--accent-green)', color: '#000', borderRadius: '50%', width: '16px', height: '16px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '10px', fontWeight: 'bold' }}>✓</div>
+                                                )}
                                             </div>
-                                            {sel && <span style={{ color: 'var(--accent-green)' }}>Selected</span>}
+                                            <div style={{ fontSize: '11px', fontWeight: '500', color: '#ddd', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', width: '100%', textAlign: 'center' }}>
+                                                {item.item_name}
+                                            </div>
+                                            <div style={{ fontSize: '10px', color: 'var(--accent-gold)', fontWeight: 'bold', marginTop: '2px' }}>
+                                                {item.item_value.toFixed(2)}g
+                                            </div>
                                         </div>
                                     );
                                 })}

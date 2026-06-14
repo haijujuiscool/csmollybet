@@ -51,12 +51,12 @@ function startRoll(io) {
         if (rand <= cumulative) { winner = e; break; }
     }
 
-    const participants = entries.map(e => ({ avatar: e.avatar || '', username: e.username }));
+    const participants = entries.map(e => ({ avatar: e.avatar || '', username: e.username, total_value: e.total_value }));
     const winnerEntry = { avatar: winner.avatar || '', username: winner.username };
 
     currentLottery.status = 'rolling';
     io.emit('lottery_rolling', { participants, winnerEntry });
-    setTimeout(() => finishLottery(io, winner), 5000);
+    setTimeout(() => finishLottery(io, winner), 7500);
 }
 
 function finishLottery(io, winner) {
@@ -88,7 +88,20 @@ function finishLottery(io, winner) {
                     total_value: totalPot
                 };
                 io.emit('lottery_finished', result);
-                db.run('INSERT INTO balance_history (user_id, change, description) VALUES (?, ?, ?)', [winnerId, 0, 'Won lottery #' + currentLottery.id]);
+                db.get('SELECT gems FROM users WHERE id = ?', [winnerId], (errGems, rowGems) => {
+                    const currentGems = (rowGems && rowGems.gems) || 0;
+                    db.run('INSERT INTO balance_history (user_id, change, new_balance, description) VALUES (?, ?, ?, ?)',
+                        [winnerId, 0, currentGems, 'Won lottery #' + currentLottery.id]);
+                });
+                
+                // Broadcast to global game feed
+                if (typeof global.broadcastGameResult === 'function') {
+                    const betAmount = winner.total_value || 0;
+                    const payoutAmount = totalPot || 0;
+                    const multiplier = betAmount > 0 ? (payoutAmount / betAmount) : 1;
+                    global.broadcastGameResult(winner.username, 'Lottery', betAmount, payoutAmount, multiplier);
+                }
+
                 resetLottery();
                 emitState(io);
             });

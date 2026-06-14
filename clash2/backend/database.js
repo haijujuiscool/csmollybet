@@ -320,16 +320,49 @@ const db = new sqlite3.Database(dbPath, (err) => {
                 });
             });
 
-            db.run(`CREATE TABLE IF NOT EXISTS balance_history (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                user_id INTEGER NOT NULL,
-                change REAL NOT NULL,
-                new_balance REAL NOT NULL,
-                description TEXT,
-                multiplier REAL,
-                timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
-                FOREIGN KEY(user_id) REFERENCES users(id)
-            )`);
+            db.all("PRAGMA table_info(balance_history)", (err, columns) => {
+                const hasOldGems = !err && columns && columns.some(c => c.name === 'old_gems');
+                const runCreate = () => {
+                    db.run(`CREATE TABLE IF NOT EXISTS balance_history (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        user_id INTEGER NOT NULL,
+                        change REAL NOT NULL,
+                        new_balance REAL NOT NULL,
+                        description TEXT,
+                        multiplier REAL,
+                        timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
+                        FOREIGN KEY(user_id) REFERENCES users(id)
+                    )`);
+                };
+                if (hasOldGems) {
+                    db.run("DROP TABLE balance_history", (dropErr) => {
+                        if (!dropErr) console.log("Dropped legacy balance_history table containing 'old_gems'");
+                        runCreate();
+                    });
+                } else {
+                    runCreate();
+                }
+            });
+
+            // Safe migration: Add missing columns to balance_history if they don't exist
+            db.all("PRAGMA table_info(balance_history)", (err, columns) => {
+                if (!err && columns) {
+                    const hasDescription = columns.some(c => c.name === 'description');
+                    const hasMultiplier = columns.some(c => c.name === 'multiplier');
+                    if (!hasDescription) {
+                        db.run("ALTER TABLE balance_history ADD COLUMN description TEXT", (e) => {
+                            if (e) console.log("Migration log: balance_history.description", e.message);
+                            else console.log("Migration: Added 'description' column to balance_history");
+                        });
+                    }
+                    if (!hasMultiplier) {
+                        db.run("ALTER TABLE balance_history ADD COLUMN multiplier REAL", (e) => {
+                            if (e) console.log("Migration log: balance_history.multiplier", e.message);
+                            else console.log("Migration: Added 'multiplier' column to balance_history");
+                        });
+                    }
+                }
+            });
 
             // Drop old trigger if it exists from previous version
             db.run("DROP TRIGGER IF EXISTS log_balance_change");
@@ -352,6 +385,21 @@ const db = new sqlite3.Database(dbPath, (err) => {
                 is_admin BOOLEAN DEFAULT 0,
                 created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
                 FOREIGN KEY(ticket_id) REFERENCES support_tickets(id),
+                FOREIGN KEY(user_id) REFERENCES users(id)
+            )`);
+
+            db.run(`CREATE TABLE IF NOT EXISTS world_cup_bets (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id INTEGER NOT NULL,
+                match_id TEXT NOT NULL,
+                home_team TEXT NOT NULL,
+                away_team TEXT NOT NULL,
+                bet_type TEXT NOT NULL,
+                odds REAL NOT NULL,
+                stake REAL NOT NULL,
+                status TEXT DEFAULT 'pending',
+                payout REAL DEFAULT 0,
+                created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
                 FOREIGN KEY(user_id) REFERENCES users(id)
             )`);
 

@@ -47,7 +47,8 @@ export default function LiveGamesFeed() {
     'Mines': '/mines',
     'Battles': '/battles',
     'Cases': '/cases',
-    'Upgrader': '/upgrader'
+    'Upgrader': '/upgrader',
+    'Lottery': '/lotteries'
   };
 
   const handleItemClick = (game) => {
