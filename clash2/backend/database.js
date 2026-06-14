@@ -72,6 +72,29 @@ const db = new sqlite3.Database(dbPath, (err) => {
                 FOREIGN KEY(battle_id) REFERENCES battles(id)
             )`);
 
+            db.run(`CREATE TABLE IF NOT EXISTS lotteries (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                creator_id INTEGER,
+                status TEXT DEFAULT 'waiting',
+                timer_ends_at DATETIME,
+                winner_id INTEGER,
+                created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY(creator_id) REFERENCES users(id),
+                FOREIGN KEY(winner_id) REFERENCES users(id)
+            )`);
+
+            db.run(`CREATE TABLE IF NOT EXISTS lottery_entries (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                lottery_id INTEGER,
+                user_id INTEGER,
+                item_name TEXT,
+                item_value REAL,
+                image_url TEXT,
+                user_inventory_id INTEGER,
+                FOREIGN KEY(lottery_id) REFERENCES lotteries(id),
+                FOREIGN KEY(user_id) REFERENCES users(id)
+            )`);
+
             db.run(`CREATE TABLE IF NOT EXISTS upgrader_items (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 creator_id INTEGER,

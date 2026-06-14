@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { Link } from 'react-router-dom';
-import { Gem, LogOut, Menu, Settings, User, WalletCards, Gift, Package } from 'lucide-react';
+import { Gem, LogOut, Menu, Settings, User, WalletCards, Gift, Package, Shield, Dices } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import DepositWithdrawModal from './DepositWithdrawModal';
 
@@ -61,8 +61,10 @@ export default function Navbar({ onToggleSidebar }) {
         { path: '/mines', label: 'Mines', icon: minesIcon },
         { path: '/battles', label: 'Battles', icon: battlesIcon },
         { path: '/cases', label: 'Cases', icon: casesIcon },
-        { path: '/upgrader', label: 'Upgrader', icon: upgraderIcon }
+        { path: '/upgrader', label: 'Upgrader', icon: upgraderIcon },
+        { path: '/lotteries', label: 'Lotteries', icon: null }
     ];
+
 
     return (
         <>
@@ -133,7 +135,11 @@ export default function Navbar({ onToggleSidebar }) {
                                         }}
                                         onClick={() => setGamesOpen(false)}
                                     >
-                                        <img src={link.icon} alt={link.label} style={{ width: '20px', height: '20px', objectFit: 'contain' }} />
+                                        {link.icon ? (
+                                            <img src={link.icon} alt={link.label} style={{ width: '20px', height: '20px', objectFit: 'contain' }} />
+                                        ) : (
+                                            <Dices size={20} />
+                                        )}
                                         <span>{link.label}</span>
                                     </Link>
                                 ))}
@@ -210,6 +216,26 @@ export default function Navbar({ onToggleSidebar }) {
                                         <Settings size={16} />
                                         Settings
                                     </Link>
+                                    <Link
+                                        to="/inventory"
+                                        className="dropdown-item"
+                                        style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '8px 12px', color: '#fff', textDecoration: 'none', borderRadius: '4px', fontSize: '14px' }}
+                                        onClick={() => setUserMenuOpen(false)}
+                                    >
+                                        <Package size={16} />
+                                        Inventory
+                                    </Link>
+                                    {user?.role === 'admin' && (
+                                        <Link
+                                            to="/admin"
+                                            className="dropdown-item"
+                                            style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '8px 12px', color: '#f59e0b', textDecoration: 'none', borderRadius: '4px', fontSize: '14px' }}
+                                            onClick={() => setUserMenuOpen(false)}
+                                        >
+                                            <Shield size={16} />
+                                            Admin Panel
+                                        </Link>
+                                    )}
                                     <div style={{ borderTop: '1px solid #333', margin: '4px 0' }} />
                                     <button
                                         className="dropdown-item"
@@ -306,6 +332,17 @@ export default function Navbar({ onToggleSidebar }) {
                                             <Package size={16} />
                                             Inventory
                                         </Link>
+                                        {user?.role === 'admin' && (
+                                            <Link
+                                                to="/admin"
+                                                className="dropdown-item"
+                                                style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '8px 12px', color: '#f59e0b', textDecoration: 'none', borderRadius: '4px', fontSize: '14px' }}
+                                                onClick={() => setProfileOpen(false)}
+                                            >
+                                                <Shield size={16} />
+                                                Admin Panel
+                                            </Link>
+                                        )}
                                         <div style={{ borderTop: '1px solid #333', margin: '4px 0' }} />
                                         <button
                                             className="dropdown-item"

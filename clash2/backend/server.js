@@ -12,6 +12,7 @@ const path = require('path');
 const sharp = require('sharp');
 const battleEngine = require('./battleEngine');
 const chatEngine = require('./chatEngine');
+const lotteryEngine = require('./lotteryEngine');
 const { getItemPrice } = require('./tradebotService');
 const steamBot = require('./steamBot');
 
@@ -90,6 +91,7 @@ global.broadcastGameResult = (username, gameName, betAmount, payoutAmount, multi
 };
 
 battleEngine(io);
+lotteryEngine(io);
 chatEngine(io);
 
 const uploadDir = path.join(__dirname, 'public', 'uploads');
@@ -679,7 +681,7 @@ app.post('/api/deposit/confirm', authenticateToken, validateBody({
     const { tradeOfferId } = req.body;
     const userId = req.user.id;
 
-    db.all('SELECT * FROM deposits WHERE user_id = ? AND trade_offer_id = ? AND status = \'pending_offer\'', [userId, tradeOfferId], (err, items) => {
+    db.all('SELECT * FROM deposits WHERE user_id = ? AND trade_offer_id = ? AND (status = \'pending_offer\' OR status = \'accepted_half\')', [userId, tradeOfferId], (err, items) => {
         if (err) {
             console.error(err);
             return res.status(500).json({ error: 'Database error fetching trade offer' });
@@ -817,20 +819,35 @@ app.post('/api/inventory/sell', authenticateToken, validateBody({
     });
 });
 
-// Withdraw an inventory item (mark for withdrawal)
+// Withdraw an inventory item (creates admin review request)
 app.post('/api/inventory/withdraw', authenticateToken, validateBody({
     itemId: val => typeof val === 'number'
 }), (req, res) => {
     const { itemId } = req.body;
     const userId = req.user.id;
 
-    db.get('SELECT * FROM user_inventories WHERE id = ? AND user_id = ? AND status = \'available\'', [itemId, userId], (err, item) => {
+    db.get('SELECT u.username, i.* FROM user_inventories i JOIN users u ON u.id = i.user_id WHERE i.id = ? AND i.user_id = ? AND i.status = \'available\'', [itemId, userId], (err, item) => {
         if (err) return res.status(500).json({ error: 'Database error' });
         if (!item) return res.status(404).json({ error: 'Item not found or already sold/withdrawn' });
 
-        db.run('UPDATE user_inventories SET status = \'withdrawing\' WHERE id = ?', [itemId], (err) => {
-            if (err) return res.status(500).json({ error: 'Database error updating item' });
-            res.json({ success: true, message: `Withdrawal request for ${item.item_name} submitted.` });
+        db.serialize(() => {
+            db.run('BEGIN TRANSACTION');
+
+            // Mark item as withdrawing
+            db.run('UPDATE user_inventories SET status = \'withdrawing\' WHERE id = ?', [itemId], (updateErr) => {
+                if (updateErr) { db.run('ROLLBACK'); return res.status(500).json({ error: 'Database error updating item' }); }
+
+                // Create withdrawal request for admin review
+                db.run('INSERT INTO withdrawals (user_id, username, item_name, item_value, image_url, status) VALUES (?, ?, ?, ?, ?, ?)',
+                    [userId, item.username, item.item_name, item.item_value, item.image_url || '', 'pending_review'], (insertErr) => {
+                    if (insertErr) { db.run('ROLLBACK'); return res.status(500).json({ error: 'Failed to create withdrawal request' }); }
+
+                    db.run('COMMIT', (commitErr) => {
+                        if (commitErr) { db.run('ROLLBACK'); return res.status(500).json({ error: 'Transaction commit failed' }); }
+                        res.json({ success: true, message: `Withdrawal request for ${item.item_name} submitted for admin review.` });
+                    });
+                });
+            });
         });
     });
 });
@@ -984,50 +1001,53 @@ app.post('/api/admin/withdrawals/action', authenticateToken, requireAdmin, valid
             return res.status(400).json({ error: 'Withdrawal already processed' });
         }
 
-        if (action === 'approve') {
-            // Approve: update status to approved
-            db.run('UPDATE withdrawals SET status = ? WHERE id = ?', ['approved', withdrawalId], (updateErr) => {
-                if (updateErr) return res.status(500).json({ error: 'Failed to approve withdrawal' });
-                res.json({ success: true, message: 'Withdrawal approved successfully' });
-            });
-        } else {
-            // Decline: refund user gems and put item back in inventory (or delete withdrawal record)
-            db.serialize(() => {
-                db.run('BEGIN TRANSACTION');
-                
-                // Refund user gems
-                db.run('UPDATE users SET gems = gems + ? WHERE id = ?', [withdrawal.item_value, withdrawal.user_id], (refundErr) => {
-                    if (refundErr) {
-                        db.run('ROLLBACK');
-                        return res.status(500).json({ error: 'Failed to refund user gems' });
-                    }
+        // Check if this is a user_inventory withdrawal (has matching item)
+        db.get('SELECT id FROM user_inventories WHERE user_id = ? AND item_name = ? AND item_value = ? AND status = \'withdrawing\'',
+            [withdrawal.user_id, withdrawal.item_name, withdrawal.item_value], (invErr, invItem) => {
 
-                    logBalanceChange(withdrawal.user_id, withdrawal.item_value, 'Refund', null);
+            if (action === 'approve') {
+                db.run('UPDATE withdrawals SET status = ? WHERE id = ?', ['approved', withdrawalId], (updateErr) => {
+                    if (updateErr) return res.status(500).json({ error: 'Failed to approve withdrawal' });
+                    res.json({ success: true, message: 'Withdrawal approved. Send the trade to the user.' });
+                });
+            } else {
+                // Decline
+                db.serialize(() => {
+                    db.run('BEGIN TRANSACTION');
 
-                    // Set withdrawal status to declined
-                    db.run('UPDATE withdrawals SET status = ? WHERE id = ?', ['declined', withdrawalId], (statusErr) => {
-                        if (statusErr) {
-                            db.run('ROLLBACK');
-                            return res.status(500).json({ error: 'Failed to update withdrawal status' });
-                        }
-
-                        // Add item back to bot inventory
-                        db.run('INSERT INTO bot_inventory (item_name, item_value, image_url) VALUES (?, ?, ?)',
-                            [withdrawal.item_name, withdrawal.item_value, withdrawal.image_url], (invErr) => {
-                            if (invErr) {
-                                db.run('ROLLBACK');
-                                return res.status(500).json({ error: 'Failed to return item to inventory' });
-                            }
-
-                            db.run('COMMIT', (commitErr) => {
-                                if (commitErr) return res.status(500).json({ error: 'Transaction commit failed' });
-                                res.json({ success: true, message: 'Withdrawal declined and gems refunded.' });
+                    if (invItem) {
+                        // User inventory withdrawal: set item back to available (no gems to refund)
+                        db.run('UPDATE user_inventories SET status = \'available\' WHERE id = ?', [invItem.id], (itemErr) => {
+                            if (itemErr) { db.run('ROLLBACK'); return res.status(500).json({ error: 'Failed to return item' }); }
+                            db.run('UPDATE withdrawals SET status = ? WHERE id = ?', ['declined', withdrawalId], (statusErr) => {
+                                if (statusErr) { db.run('ROLLBACK'); return res.status(500).json({ error: 'Failed to update status' }); }
+                                db.run('COMMIT', (commitErr) => {
+                                    if (commitErr) return res.status(500).json({ error: 'Transaction commit failed' });
+                                    res.json({ success: true, message: 'Withdrawal declined. Item returned to inventory.' });
+                                });
                             });
                         });
-                    });
+                    } else {
+                        // Bot inventory withdrawal: refund gems, return to bot_inventory
+                        db.run('UPDATE users SET gems = gems + ? WHERE id = ?', [withdrawal.item_value, withdrawal.user_id], (refundErr) => {
+                            if (refundErr) { db.run('ROLLBACK'); return res.status(500).json({ error: 'Failed to refund user gems' }); }
+                            logBalanceChange(withdrawal.user_id, withdrawal.item_value, 'Refund', null);
+                            db.run('UPDATE withdrawals SET status = ? WHERE id = ?', ['declined', withdrawalId], (statusErr) => {
+                                if (statusErr) { db.run('ROLLBACK'); return res.status(500).json({ error: 'Failed to update status' }); }
+                                db.run('INSERT INTO bot_inventory (item_name, item_value, image_url) VALUES (?, ?, ?)',
+                                    [withdrawal.item_name, withdrawal.item_value, withdrawal.image_url], (invErr) => {
+                                    if (invErr) { db.run('ROLLBACK'); return res.status(500).json({ error: 'Failed to return item' }); }
+                                    db.run('COMMIT', (commitErr) => {
+                                        if (commitErr) return res.status(500).json({ error: 'Transaction commit failed' });
+                                        res.json({ success: true, message: 'Withdrawal declined and gems refunded.' });
+                                    });
+                                });
+                            });
+                        });
+                    }
                 });
-            });
-        }
+            }
+        });
     });
 });
 
@@ -1370,6 +1390,18 @@ io.use((socket, next) => {
         if (!err) socket.userId = user.id;
         next();
     });
+});
+
+io.use((socket, next) => {
+    const token = socket.handshake.auth?.token;
+    if (token) {
+        jwt.verify(token, JWT_SECRET, (err, decoded) => {
+            if (!err) socket.user = decoded;
+            next();
+        });
+    } else {
+        next();
+    }
 });
 
 io.on('connection', (socket) => {

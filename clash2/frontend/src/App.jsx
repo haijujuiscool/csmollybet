@@ -12,6 +12,7 @@ import CaseCreator from './pages/CaseCreator';
 import Cases from './pages/Cases';
 import Battles from './pages/Battles';
 import Battle from './pages/Battle';
+import Lotteries from './pages/Lotteries';
 import Profile from './pages/Profile';
 import Mines from './pages/Mines';
 import Upgrader from './pages/Upgrader';
@@ -124,6 +125,7 @@ function App() {
             <Route path='/profile' element={<Profile />} />
             <Route path='/daily-case' element={<FreeDailyCase />} />
             <Route path='/inventory' element={<Inventory />} />
+            <Route path='/lotteries' element={<Lotteries />} />
           </Routes>
         </div>
         <Footer />

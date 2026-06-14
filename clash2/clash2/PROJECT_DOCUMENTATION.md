@@ -10,12 +10,16 @@ Diese Dokumentation fasst den aktuellen Stand des Projekts zusammen, damit in ei
 ## 📂 Dateistruktur (Wichtigste Dateien)
 - `frontend/src/App.jsx`: Main Routing & Layout (Navbar, Chat-Sidebar, Feed-Sidebar, Expand-Handles).
 - `frontend/src/contexts/AuthContext.jsx`: Verwaltet User-Session, Token und das optimistische Balance-Update (`setUser`).
-- `frontend/src/utils/sounds.js`: Web Audio API Modul für alle Soundeffekte (Karten, Explosionen, Ticks).
+- `frontend/src/utils/sounds.js`: Web Audio API Modul für alle Soundeffekte (Karten, Explosionen, Ticks). Tab-visibility mute via `visibilitychange` listener.
 - `frontend/src/components/Chat.jsx`: Chat-Sidebar mit Live Chat und **Live Game Feed** (Toggle zwischen beiden Views).
 - `frontend/src/components/LiveGamesFeed.jsx`: Live Game Feed mit All/Top-Filter und Steam-Avatar-Anzeige, klickbare Items navigieren zur Spiel-Route.
 - `frontend/src/components/RouletteSpinner.jsx`: Roulette-Spinner-Animation für Case Openings (mit Mythic-Spin Support).
-- `frontend/src/components/Navbar.jsx`: Navbar mit Brand "CSMOLLY", Games-Dropdown, Balance-Anzeige, Daily/Deposit/Profile-Buttons, User-Dropdown (Desktop + Mobile).
+- `frontend/src/components/Navbar.jsx`: Navbar mit Brand "CSMOLLY", Games-Dropdown, Balance-Anzeige, Daily/Deposit/Profile-Buttons, User-Dropdown (Desktop + Mobile). Lottery link (`Dices` icon).
+- `frontend/src/components/Sidebar.jsx`: Mobile hamburger menu with game links + Inventory link.
+- `frontend/src/pages/Lotteries.jsx`: Single global lottery page. Join with inventory items, timer countdown, spinning avatar carousel, winner display with items.
+- `frontend/src/pages/Home.jsx`: Hero, live lottery banner (pot, avatars, items, timer, spinner), game grid with Lotteries card.
 - `backend/server.js`: Hauptserver, API-Endpunkte, SQLite-Queries, `broadcastGameResult()`-Funktion für den Game Feed.
+- `backend/lotteryEngine.js`: Single global lottery with socket events (get_lottery, join_lottery, lottery_tick/100ms, lottery_rolling spinner, lottery_finished). Weighted roll by item value.
 - `backend/battleEngine.js`: Externe Logik für Case Battles (Lobby, Timer, Bot-Logik, Game Feed Broadcast).
 - `backend/chatEngine.js`: Socket.io Chat + Game Feed History Emission bei Verbindung.
 - `backend/admin.js`: CLI-Tool für Admin-Aufgaben (z.B. Gems vergeben: `node admin.js add-gems Username 1000`).
@@ -39,6 +43,7 @@ Diese Dokumentation fasst den aktuellen Stand des Projekts zusammen, damit in ei
 10. **Blackjack (Deaktiviert):** Derzeit im Navigations-Menü deaktiviert.
 11. **Slots (Deaktiviert):** Derzeit im Navigations-Menü deaktiviert.
 12. **Kalshi Bets (Deaktiviert):** Vorhersagemärkte basierend auf der Kalshi-API. (Aktuell deaktiviert, um Leistung zu sparen und den Netzwerk-Workload zu minimieren).
+13. **Lottery:** Single global lottery (not user-created). Players join by depositing items from `user_inventories`. When ≥2 players joined, a 30s timer starts (ticks every 100ms for smooth countdown). Weighted roll by item value — higher value = higher odds. Winner takes all items. Spinning animation with profile picture carousel (rapid cycling, decelerates, snaps to winner).
 
 ## 💬 Chat-System & Live Game Feed
 
@@ -113,6 +118,19 @@ Diese Dokumentation fasst den aktuellen Stand des Projekts zusammen, damit in ei
 - **Neue Inventory-Seite:** `/inventory` zeigt gelagerte Items mit Sell (→Gems) und Withdraw per Hover. Navbar-Dropdown wurde um Inventory-Link erweitert.
 - **DepositWithdrawModal:** Payouts-Tab entfernt, zeigt "Goes to Inventory" statt Gem-Aufschlüsselung.
 - **Deposit-Loop-Fix:** Steam API lieferte `Rarity`-Tags ohne `name`-Property → `rarityTag.name.replace()` crashte bei Inventory-Fetch. Null-Check hinzugefügt.
+- **Shell stuck root cause:** `steamBot.js` `process.stdin.once('data', ...)` in `steamGuard` handler blocks parent PowerShell when stdin is inherited. **Fix**: Read Steam Guard code from `sg.txt` file (or `STEAM_GUARD_CODE` env var) first — no stdin redirection needed.
+- **JWT_SECRET persisted:** Added to `.env` so restarts don't invalidate tokens.
+- **Lottery → single global instance:** Changed from user-created lotteries to one always-running lottery. Join with items, ≥2 players triggers 30s timer, weighted roll, winner takes all.
+- **Lottery spinner animation:** Server emits `lottery_rolling` with shuffled profile pics + winner index. Frontend cycles avatars rapidly (50ms interval) for 2.5s → decelerates → snaps to winner with gold border.
+- **Lottery items display:** Each player entry shows deposited items with name, float value, image, gem value — on both /lotteries page and home page banner.
+- **Home page lottery banner:** Live lottery widget between hero and game grid. Shows current pot, player avatars with items, timer, winner announcement.
+- **Lottery timer:** Ticks every 100ms for smooth countdown display (was 1000ms).
+- **Admin withdrawal review:** `POST /api/inventory/withdraw` creates `withdrawals` table record. Admin approves (keeps `withdrawing`) or declines (returns to `available`). Old bot-inventory withdrawals still refund gems on decline.
+- **Navbar/Sidebar lottery links:** `Dices` icon in Games dropdown, Sidebar, and /lotteries route in App.jsx.
+- **Sounds tab-visibility mute:** `visibilitychange` listener + `play()` guard in `sounds.js` — all sounds silently dropped when tab hidden.
+- **Case card button alignment:** Card container `display: flex; flexDirection: column; alignItems: center` + button `marginTop: auto`.
+- **Cases/items translated:** 37 German-to-English translations via SQL UPDATE.
+- **Socket auth middleware:** JWT verification on socket.io connection (`io.use`) — used by lottery engine for authenticated operations.
 
 ## 🔧 Architektur-Details
 
@@ -135,6 +153,21 @@ global.broadcastGameResult = (username, gameName, betAmount, payoutAmount, multi
 |-------|----------|-------------|
 | `game_feed_history` | Server → Client | Array der letzten 20 Ergebnisse bei Verbindung |
 | `game_feed_update` | Server → Client | Einzelnes neues Ergebnis (wird mit 5s Delay im Frontend angezeigt) |
+
+### Socket Events (Lottery)
+| Event | Richtung | Beschreibung |
+|-------|----------|-------------|
+| `get_lottery` | Client → Server | Request current lottery state (callback) |
+| `join_lottery` | Client → Server | Join with `{ itemIds: [...] }`, requires auth |
+| `lottery_state` | Server → Client | Current state: entries (with items), status, total_value |
+| `lottery_tick` | Server → Client | Timer update every 100ms: `{ timeLeft }` |
+| `lottery_rolling` | Server → Client | Spinner data: `{ entries: [{avatar,username}], winnerIndex }` |
+| `lottery_finished` | Server → Client | Winner result with items and participants |
+
+### Socket Auth Middleware
+- `io.use((socket, next) => { ... })` in `server.js` verifies JWT from `socket.handshake.auth.token`
+- Sets `socket.user` with decoded payload (id, username, role)
+- Lottery `join_lottery` uses `socket.user.id` (not client-provided userId)
 
 ## 🚫 Deaktivierte Features (Kalshi Bets)
 
@@ -166,9 +199,10 @@ Um das Feature wieder in Betrieb zu nehmen, müssen lediglich die oben beschrieb
 - Database auto-overwrite prevention: `database.js` only seeds when `bot_inventory` is empty
 
 ### Steam Bot (Real Mode)
-- `backend/.env` — Steam credentials are set (`STEAM_ACCOUNT_NAME=jujuscol`, `STEAM_PASSWORD=...`)
+- `backend/.env` — Steam credentials are set (`STEAM_ACCOUNT_NAME=jujuscol`, `STEAM_PASSWORD=...`, `JWT_SECRET=...`)
 - Backend starts in **real Steam bot mode** — connects to Steam (requires Steam Guard code on startup)
-- To enter Steam Guard code: run backend in a console window and input the 5-character code from the Steam mobile app
+- Steam Guard code is read from `sg.txt` file in project root (or `STEAM_GUARD_CODE` env var) — **no stdin reading**, prevents parent shell from blocking
+- Create `sg.txt` with the 5-character code before starting: `Set-Content sg.txt "XXXXX"`
 - Deposits/withdrawals work via real Steam trade offers once bot is fully logged in
 
 ### Item Inventory System (Replaces Gems + Pending Payouts)
@@ -177,16 +211,24 @@ Um das Feature wieder in Betrieb zu nehmen, müssen lediglich die oben beschrieb
 - **No 7-day payout lock** — items are immediately available
 - `/inventory` page at `frontend/src/pages/Inventory.jsx` — item grid with hover actions:
   - **Sell** — converts item to gems at full `item_value` via `POST /api/inventory/sell`
-  - **Withdraw** — marks item as `withdrawing` (admin handles trade) via `POST /api/inventory/withdraw`
+  - **Withdraw** — creates `withdrawals` table record (`pending_review`) for admin approval via `POST /api/inventory/withdraw`
 - Navbar dropdown has "Inventory" link (`Package` icon) between Settings and Logout
 - DepositWithdrawModal: Payouts tab removed, shows "Goes to Inventory" instead of gem breakdown
 - **Removed old system:** `deposits` table, `startPayoutReleaseLoop`, `/api/deposits/pending`, `/api/deposits/mature-test`
 - New endpoints: `GET /api/user-inventory`, `POST /api/inventory/sell`, `POST /api/inventory/withdraw`
 
+### Admin Withdrawal Review
+- `POST /api/inventory/withdraw` creates record in `withdrawals` table with `status: 'pending_review'`
+- Admin panel (`/admin`) shows pending withdrawals with Approve/Decline actions
+- **Approve:** Item stays `withdrawing`, admin handles trade manually
+- **Decline:** Item returned to `available` status in `user_inventories` (old bot_inventory withdrawals refund gems on decline)
+- Admin action endpoint handles both old (bot_inventory refund) and new (user_inventories return to `available`) withdrawal types
+
 ### Critical Fixes
 - **Nested transaction crash** (`tradebotService.js:122`): Payout loop had `BEGIN TRANSACTION` inside `db.all` callback — moved to single `db.serialize()` wrapper
 - **Fake skin combos**: Seed scripts originally generated random names that didn't exist in CS2 → replaced all 644 items with real CSGO-API data
 - **`rarityTag.name.replace()` crash** (`server.js:522`): Steam inventory API returns `Rarity` tags without a `name` for some items — added `&& rarityTag.name` null check to prevent `Cannot read properties of undefined (reading 'replace')`
+- **Shell stuck root cause:** `process.stdin.once('data')` in steam-user's steamGuard handler blocks parent shell. **Fix:** Read code from `sg.txt` file or `STEAM_GUARD_CODE` env var first, skip stdin entirely.
 
 ## 🚀 Starten der Umgebung
 Um die Entwicklungsumgebung zu starten, müssen zwei Terminals geöffnet werden:

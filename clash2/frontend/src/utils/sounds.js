@@ -2,15 +2,25 @@
 const AudioContext = window.AudioContext || window.webkitAudioContext;
 let audioCtx = null;
 
+let tabVisible = true;
+document.addEventListener('visibilitychange', () => {
+    tabVisible = !document.hidden;
+});
+
 const getCtx = () => {
     if (!audioCtx && AudioContext) audioCtx = new AudioContext();
     if (audioCtx?.state === 'suspended') audioCtx.resume();
     return audioCtx;
 };
 
+const play = (fn) => {
+    if (!tabVisible) return;
+    fn();
+};
+
 const sounds = {
     // Quick tick (e.g. wheel clicks, card deals)
-    tick: (freq = 600) => {
+    tick: (freq = 600) => play(() => {
         const ctx = getCtx(); if (!ctx) return;
         const osc = ctx.createOscillator();
         const gain = ctx.createGain();
@@ -20,10 +30,10 @@ const sounds = {
         gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.06);
         osc.start(ctx.currentTime);
         osc.stop(ctx.currentTime + 0.06);
-    },
+    }),
 
     // Win / cashout jingle (ascending notes)
-    win: () => {
+    win: () => play(() => {
         const ctx = getCtx(); if (!ctx) return;
         [523, 659, 784, 1047].forEach((freq, i) => {
             const osc = ctx.createOscillator();
@@ -36,10 +46,10 @@ const sounds = {
             osc.start(ctx.currentTime + i * 0.1);
             osc.stop(ctx.currentTime + i * 0.1 + 0.2);
         });
-    },
+    }),
 
     // Lose / explode (low rumble descending)
-    lose: () => {
+    lose: () => play(() => {
         const ctx = getCtx(); if (!ctx) return;
         const osc = ctx.createOscillator();
         const gain = ctx.createGain();
@@ -51,10 +61,10 @@ const sounds = {
         gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.4);
         osc.start(ctx.currentTime);
         osc.stop(ctx.currentTime + 0.4);
-    },
+    }),
 
     // Card flip sound
-    cardFlip: () => {
+    cardFlip: () => play(() => {
         const ctx = getCtx(); if (!ctx) return;
         const osc = ctx.createOscillator();
         const gain = ctx.createGain();
@@ -66,10 +76,10 @@ const sounds = {
         gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.08);
         osc.start(ctx.currentTime);
         osc.stop(ctx.currentTime + 0.08);
-    },
+    }),
 
     // Bomb planted sound (CSGO audio file)
-    bombPlanted: () => {
+    bombPlanted: () => play(() => {
         try {
             const audio = new Audio('/bomb_planted.mp3');
             audio.volume = 0.4;
@@ -77,9 +87,9 @@ const sounds = {
         } catch (e) {
             console.error("Failed to play bombPlanted sound:", e);
         }
-    },
+    }),
     // Bomb explode sound (CSGO audio file)
-    bombExplode: () => {
+    bombExplode: () => play(() => {
         try {
             const audio = new Audio('/bomb_exploding.m4a');
             audio.volume = 0.4;
@@ -87,12 +97,11 @@ const sounds = {
         } catch (e) {
             console.error("Failed to play bombExplode sound:", e);
         }
-    },
+    }),
 
     // Crash explosion
-    crash: () => {
+    crash: () => play(() => {
         const ctx = getCtx(); if (!ctx) return;
-        // White noise burst
         const bufferSize = ctx.sampleRate * 0.3;
         const buffer = ctx.createBuffer(1, bufferSize, ctx.sampleRate);
         const data = buffer.getChannelData(0);
@@ -104,10 +113,10 @@ const sounds = {
         gain.gain.setValueAtTime(0.15, ctx.currentTime);
         gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.3);
         noise.start(ctx.currentTime);
-    },
+    }),
 
     // Dig sound (shovel hit)
-    dig: () => {
+    dig: () => play(() => {
         const ctx = getCtx(); if (!ctx) return;
         const osc = ctx.createOscillator();
         const gain = ctx.createGain();
@@ -119,10 +128,10 @@ const sounds = {
         gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.15);
         osc.start(ctx.currentTime);
         osc.stop(ctx.currentTime + 0.15);
-    },
+    }),
 
     // Spinner whoosh (higher pitch)
-    spinStart: () => {
+    spinStart: () => play(() => {
         const ctx = getCtx(); if (!ctx) return;
         const osc = ctx.createOscillator();
         const gain = ctx.createGain();
@@ -134,10 +143,10 @@ const sounds = {
         gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.5);
         osc.start(ctx.currentTime);
         osc.stop(ctx.currentTime + 0.5);
-    },
+    }),
 
     // Bet placed confirmation
-    betPlace: () => {
+    betPlace: () => play(() => {
         const ctx = getCtx(); if (!ctx) return;
         const osc = ctx.createOscillator();
         const gain = ctx.createGain();
@@ -148,10 +157,10 @@ const sounds = {
         gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.1);
         osc.start(ctx.currentTime);
         osc.stop(ctx.currentTime + 0.1);
-    },
+    }),
 
     // Slot reel stop (higher pitched click)
-    reelStop: () => {
+    reelStop: () => play(() => {
         const ctx = getCtx(); if (!ctx) return;
         const osc = ctx.createOscillator();
         const gain = ctx.createGain();
@@ -163,7 +172,7 @@ const sounds = {
         gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.1);
         osc.start(ctx.currentTime);
         osc.stop(ctx.currentTime + 0.1);
-    }
+    })
 };
 
 export default sounds;

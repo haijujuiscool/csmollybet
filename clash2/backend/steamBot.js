@@ -39,10 +39,26 @@ if (isEnabled) {
     client.logOn(logOnOptions);
 
     client.on('steamGuard', (domain, callback) => {
-        console.log(`[SteamBot] Steam Guard active. Please generate a code from your phone's Steam app.`);
-        // We will prompt or check if we can read from standard input, or we can listen to a global variable.
-        // For simplicity in a backend bot, we'll listen on console input to let the developer enter it.
-        console.log(`[SteamBot] Enter the 5-character Steam Guard code here in the console:`);
+        if (process.env.STEAM_GUARD_CODE) {
+            const code = process.env.STEAM_GUARD_CODE.trim();
+            console.log(`[SteamBot] Using Steam Guard code from STEAM_GUARD_CODE env var.`);
+            process.env.STEAM_GUARD_CODE = '';
+            return callback(code);
+        }
+        const fs = require('fs');
+        const path = require('path');
+        const sgFile = path.join(__dirname, '..', 'sg.txt');
+        try {
+            if (fs.existsSync(sgFile)) {
+                const code = fs.readFileSync(sgFile, 'utf8').trim();
+                if (code.length === 5) {
+                    console.log(`[SteamBot] Using Steam Guard code from sg.txt`);
+                    fs.unlinkSync(sgFile);
+                    return callback(code);
+                }
+            }
+        } catch (e) {}
+        console.log(`[SteamBot] Steam Guard code required. Set STEAM_GUARD_CODE env var or create sg.txt with the code.`);
         process.stdin.resume();
         process.stdin.once('data', (data) => {
             const code = data.toString().trim();
@@ -85,7 +101,7 @@ if (isEnabled) {
     console.log('[SteamBot] Bot credentials missing in .env. Running in simulated fallback mode.');
 }
 
-// Credits user balance when a real trade offer is accepted on Steam
+// Inserts items into user_inventories when a real trade offer is accepted on Steam
 function handleRealTradeAccepted(offer) {
     const tradeOfferId = offer.id;
 
@@ -97,39 +113,46 @@ function handleRealTradeAccepted(offer) {
 
         const userId = rows[0].user_id;
         const totalValue = rows.reduce((sum, row) => sum + row.item_value, 0);
-        const instantPayout = totalValue * 0.5;
 
         db.serialize(() => {
             db.run("BEGIN TRANSACTION");
-            
-            // Credit 50% gems instantly
-            db.run("UPDATE users SET gems = gems + ? WHERE id = ?", [instantPayout, userId], (err) => {
-                if (err) {
-                    console.error(`[SteamBot] Error crediting gems to user ${userId}:`, err.message);
+
+            // Insert each item into user_inventories
+            const stmt = db.prepare("INSERT INTO user_inventories (user_id, item_name, item_value, image_url, trade_offer_id, status) VALUES (?, ?, ?, ?, ?, ?)");
+            let insertErr = null;
+            for (const row of rows) {
+                stmt.run([userId, row.item_name, row.item_value, row.image_url || '', tradeOfferId, 'available'], (err) => {
+                    if (err && !insertErr) insertErr = err;
+                });
+            }
+
+            stmt.finalize(() => {
+                if (insertErr) {
+                    console.error(`[SteamBot] Error inserting items into user_inventories:`, insertErr.message);
                     db.run("ROLLBACK");
                     return;
                 }
 
-                // Update deposits to 'accepted_half' and set lock date to 7 days
-                db.run(
-                    "UPDATE deposits SET status = 'accepted_half', payout_date = datetime('now', '+7 days') WHERE trade_offer_id = ? AND status = 'pending_offer'",
-                    [tradeOfferId],
-                    (updateErr) => {
-                        if (updateErr) {
-                            console.error(`[SteamBot] Error updating deposit rows to accepted_half:`, updateErr.message);
-                            db.run("ROLLBACK");
-                            return;
-                        }
-
-                        db.run("COMMIT", (commitErr) => {
-                            if (commitErr) {
-                                console.error("[SteamBot] DB transaction commit failed:", commitErr.message);
-                            } else {
-                                console.log(`[SteamBot] Real trade successfully processed. Credited ${instantPayout} gems to user ID ${userId} for offer #${tradeOfferId}.`);
-                            }
-                        });
+                // Mark deposits as completed (no gems credited)
+                db.run("UPDATE deposits SET status = 'completed' WHERE trade_offer_id = ? AND status = 'pending_offer'", [tradeOfferId], (updateErr) => {
+                    if (updateErr) {
+                        console.error(`[SteamBot] Error updating deposit rows:`, updateErr.message);
+                        db.run("ROLLBACK");
+                        return;
                     }
-                );
+
+                    db.run("COMMIT", (commitErr) => {
+                        if (commitErr) {
+                            console.error("[SteamBot] DB transaction commit failed:", commitErr.message);
+                        } else {
+                            console.log(`[SteamBot] Real trade #${tradeOfferId} accepted. ${rows.length} items added to user_inventories for user ID ${userId} (total value: $${totalValue.toFixed(2)}).`);
+                            // Track affiliate deposit
+                            if (typeof global.trackAffiliateDeposit === 'function') {
+                                global.trackAffiliateDeposit(userId, totalValue);
+                            }
+                        }
+                    });
+                });
             });
         });
     });

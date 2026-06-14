@@ -126,7 +126,8 @@ export default function Cases() {
                                 style={{
                                     width: '200px', backgroundColor: '#1e1e1e', borderRadius: '8px', padding: '15px',
                                     textAlign: 'center', border: '1px solid #333', cursor: 'pointer',
-                                    userSelect: 'none', position: 'relative'
+                                    userSelect: 'none', position: 'relative',
+display: 'flex', flexDirection: 'column', alignItems: 'center'
                                 }}
                             >
                                 {/* Info icon for mobile and desktop preview tap/click */}
@@ -174,7 +175,7 @@ export default function Cases() {
                                         </span>
                                     )}
                                 </div>
-                                <div style={{ display: 'flex', gap: '8px' }}>
+                                <div style={{ display: 'flex', gap: '8px', marginTop: 'auto' }}>
                                     <button className="btn-primary" style={{ flex: 1, padding: '8px', fontSize: '13px' }} onClick={() => handleSoloOpen(c)}>
                                         Open Case
                                     </button>

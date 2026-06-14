@@ -52,7 +52,7 @@ export default function DepositWithdrawModal({ isOpen, onClose, initialTab }) {
                     const res = await axios.get(`/api/deposit/status/${activeTradeOffer.id}`, { headers });
                     if (res.data.status === 'accepted') {
                         clearInterval(interval);
-                        setMessage(`Real trade offer #${activeTradeOffer.id} accepted! Balance credited.`);
+                        setMessage(`Real trade offer #${activeTradeOffer.id} accepted! Items have been added to your inventory.`);
                         setTradeOfferStep('success');
                         refreshBalance();
                         fetchData();
@@ -645,7 +645,7 @@ export default function DepositWithdrawModal({ isOpen, onClose, initialTab }) {
                                 </div>
                                 <h3 style={{ fontSize: '22px', fontWeight: 'bold', color: '#fff', marginBottom: '10px' }}>TRADE SUCCESSFUL</h3>
                                 <div style={{ color: '#acb2b8', fontSize: '14px', maxWidth: '400px', lineHeight: '1.5', marginBottom: '30px' }}>
-                                    {message || 'The trade was successfully completed! Your account has been credited with the instant 50% gems payout. The remaining 50% is locked under the 7-day trade lock.'}
+                                    {message || 'The trade was successfully completed! All items have been added to your inventory.'}
                                 </div>
                                 <button
                                     onClick={() => {
