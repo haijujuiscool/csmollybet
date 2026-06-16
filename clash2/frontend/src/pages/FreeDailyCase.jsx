@@ -124,7 +124,7 @@ export default function FreeDailyCase() {
     const canOpen = checks && checks.username && checks.pfp && checks.ownsCs2;
 
     const imageExts = ['.png', '.jpg', '.jpeg', '.gif', '.webp'];
-    const transferImages = transfers.filter(f => imageExts.some(ext => f.name.toLowerCase().endsWith(ext)));
+    const transferImages = transfers.filter(f => imageExts.some(ext => f.name.toLowerCase().endsWith(ext)) && f.name.toLowerCase() !== 'a8d32192-6c18-41fd-a61c-fa916bddd279.png');
     const leftBgImage = transfers.find(f => f.name.toLowerCase() === 'kskdaily.png');
     const bgImage = transferImages.find(f => f.name.toLowerCase() !== 'kskdaily.png') || transferImages[0];
     const [isDesktop, setIsDesktop] = useState(window.innerWidth >= 1024);

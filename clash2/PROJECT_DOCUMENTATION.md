@@ -44,6 +44,7 @@ Diese Dokumentation fasst den aktuellen Stand des Projekts zusammen, damit in ei
 11. **Slots (Deaktiviert):** Derzeit im Navigations-Menü deaktiviert.
 12. **Kalshi Bets (Deaktiviert):** Vorhersagemärkte basierend auf der Kalshi-API. (Aktuell deaktiviert, um Leistung zu sparen und den Netzwerk-Workload zu minimieren).
 13. **Lottery:** Single global lottery (not user-created). Players join by depositing items from `user_inventories`. When ≥2 players joined, a 30s timer starts (ticks every 100ms for smooth countdown). Weighted roll by item value — higher value = higher odds. Winner takes all items. Spinning animation with profile picture carousel (rapid cycling, decelerates, snaps to winner).
+    - **Bot players:** 2–5 bot players auto-join each round with realistic human names (James Wilson, Sarah Chen, etc.) and 1–3 items worth 1–10 gems. Bots use random avatars from `/avatars/`. Bots never win — winner always a real player. Bot items exist only in memory (no DB records).
 14. **World Cup 2026 Betting:** Real-time sports betting on FIFA World Cup 2026 matches. Features:
     - **Real match data** from `thestatsapi.com` (initial fixtures) + real-time scores from `wcup2026.org/api/data.php`.
     - **Real odds** from The Odds API (free tier, 500 req/month) with fallback to strength-based synthetic odds.
@@ -75,8 +76,21 @@ Diese Dokumentation fasst den aktuellen Stand des Projekts zusammen, damit in ei
   - **Grün** (`#22c55e`): Profit > 0 (Gewinn).
   - **Rot** (`#ef4444`): Profit ≤ 0 (Verlust oder Break-even).
 - **Filter:** "All" (alle) und "Top" (Profit/Bet > 5x).
-- **History:** Beim Verbinden werden die letzten 20 Ergebnisse aus `global.gameFeedHistory` gesendet (maximal 20 im Feed sichtbar).
+- **History:** Beim Verbinden werden die letzten 100 Ergebnisse aus `global.gameFeedHistory` gesendet (maximal 100 im Feed sichtbar).
 - **Klick-Navigation:** Feed-Items sind klickbar (`cursor: pointer`) und navigieren zur entsprechenden Spielseite (Double→/double, Crash→/crash, etc.).
+
+### Fake Feed Generator
+- **Datei:** `backend/fakeFeedGenerator.js` — 23 Avatare aus `public/avatars/`, realistische Spielaktivität.
+- **Algorithmus:** ~1 Play/sec mit hoher Varianz (0.1–15s Lücken). 35% Streak-Chance (1–4 Plays). 20% pickt den am längsten inaktiven Spieler.
+- **Einsatzbereiche:** Gewichtet — 35% 0.01–0.50, 30% 0.50–5, 20% 5–50, 10% 50–200, 5% 200–1000.
+- **Spiele:** Nur Double/Crash/Mines/Cases/Upgrader (kein Lottery/Battles, um Kollisionen mit echten Spielen zu vermeiden).
+- **Win-Rate:** 45%.
+- **Anzeige:** Nur Avatare (keine Namen) mit `feedSlideIn`-Animation (0.35s ease-out, `translateY(-30px)` → `0`).
+
+### Online Counter
+- **Implementierung:** Server-seitig in `chatEngine.js`. Startwert 200–600, driftet ±10 alle 3s.
+- **Broadcast:** `io.emit('online_count', count)` alle 3s + bei jeder Socket-Verbindung.
+- **Frontend:** Chat.jsx zeigt Counter unter dem Chat-Input mit `Users`-Icon an.
 
 ## 🎨 Design, Background & Menü-Interaktionen
 - **Hintergrundbild (`background1`):** Das vordefinierte Hintergrundbild (`background1`) wird responsive so gecroppt, dass linker und rechter Rand perfekt passen und kein monotoner Hintergrund angezeigt wird.
@@ -122,7 +136,7 @@ Diese Dokumentation fasst den aktuellen Stand des Projekts zusammen, damit in ei
 - **Registrierung entfernt:** Homepage-Button, `/register`-Route und Import in `App.jsx` entfernt.
 - **Login auf Startseite:** Geht direkt zu `/api/auth/steam` (keine Login-Seite).
 - **Node.js Upgrade:** Von 20.11.1 auf 22.14.0 (nötig für Vite 8).
-- **Chat/Feed Limits reduziert:** Chat-History von 50 auf 30 Nachrichten reduziert. Feed-History von 50 auf 20 Einträge reduziert. Beide Bereiche auf Desktop auf `overflow: hidden` gesetzt (kein Scrollen der Nachrichten-Container).
+- **Chat/Feed Limits reduziert:** Chat-History von 50 auf 30 Nachrichten reduziert. Feed-History von 50 auf 100 Einträge erhöht (um Lücken am oberen Ende zu vermeiden).
 - **Navbar Desktop-Layout:** Navbar verwendet jetzt `position: fixed` auf Desktop (≥1281px) und spannt über die volle Breite. Chat-Sidebar und Feed-Sidebar sind mit `top: 64px` darunter positioniert. Expand-Handles sind auf Desktop ausgeblendet. `body { overflow-x: hidden }` verhindert horizontale Scrollbalken.
 - **Pending Payouts entfernt:** Items gehen direkt in `user_inventories` statt 50% sofort/50% delayed gems. `deposits`-Tabelle und `startPayoutReleaseLoop` wurden entfernt. Deposit bestätigt mit 100% Item-Gutschrift.
 - **Neue Inventory-Seite:** `/inventory` zeigt gelagerte Items mit Sell (→Gems) und Withdraw per Hover. Navbar-Dropdown wurde um Inventory-Link erweitert.
@@ -141,6 +155,13 @@ Diese Dokumentation fasst den aktuellen Stand des Projekts zusammen, damit in ei
 - **Case card button alignment:** Card container `display: flex; flexDirection: column; alignItems: center` + button `marginTop: auto`.
 - **Cases/items translated:** 37 German-to-English translations via SQL UPDATE.
 - **Socket auth middleware:** JWT verification on socket.io connection (`io.use`) — used by lottery engine for authenticated operations.
+- **Fake Feed Generator (new):** `backend/fakeFeedGenerator.js` — 23 Avatare, Smart Algorithmus (Streaks, gewichtete Einsatzbereiche, Spielepool ohne Lottery/Battles), ~1 Play/sec, emittiert via `io.emit('game_feed_update')`.
+- **Online Counter (server-side):** `chatEngine.js` verwaltet Counter (200–600, ±10 Drift alle 3s), Broadcast via `online_count` Event.
+- **Expand Handles ≤1280px:** `display: none` nur auf `@media (max-width: 1280px)` — sichtbar auf Desktop ≥1281px.
+- **World Cup Background z-index:** Von `-1` auf `0` geändert, damit es über dem Body-Hintergrund rendert.
+- **Avatar Static Route:** Backend serviert `/avatars/` aus `public/avatars/`, Vite-Proxy leitet `/avatars` an Backend weiter.
+- **Lottery Bot Players:** `lotteryEngine.js` fügt 2–5 Bots pro Runde hinzu (echte Namen, 1–10 Gems Items). Bots gewinnen nie.
+- **Feed Capacity:** History-Limit von 20 auf 100 erhöht, damit die Anzeige oben immer voll ist.
 
 ## 🔧 Architektur-Details
 
@@ -161,8 +182,9 @@ global.broadcastGameResult = (username, gameName, betAmount, payoutAmount, multi
 ### Socket Events (Game Feed)
 | Event | Richtung | Beschreibung |
 |-------|----------|-------------|
-| `game_feed_history` | Server → Client | Array der letzten 20 Ergebnisse bei Verbindung |
+| `game_feed_history` | Server → Client | Array der letzten 100 Ergebnisse bei Verbindung |
 | `game_feed_update` | Server → Client | Einzelnes neues Ergebnis (wird mit 5s Delay im Frontend angezeigt) |
+| `online_count` | Server → Client | Live-Online-Counter (200–600, driftet ±10 alle 3s) |
 
 ## ⚽ World Cup 2026 Betting Architecture
 

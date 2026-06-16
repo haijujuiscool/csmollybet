@@ -3,12 +3,23 @@ const jwt = require('jsonwebtoken');
 const { JWT_SECRET } = require('./security');
 
 let chatHistory = [];
+let onlineCount = Math.floor(Math.random() * 401) + 200;
+
+let ioRef;
+
+setInterval(() => {
+    const step = Math.floor(Math.random() * 21) - 10;
+    onlineCount = Math.max(200, Math.min(600, onlineCount + step));
+    if (ioRef) ioRef.emit('online_count', onlineCount);
+}, 3000);
 
 module.exports = (io) => {
+    ioRef = io;
     io.on('connection', (socket) => {
         // Send initial history
         socket.emit('chat_history', chatHistory);
         socket.emit('game_feed_history', global.gameFeedHistory || []);
+        socket.emit('online_count', onlineCount);
 
         socket.on('send_chat', async (data, callback) => {
             const safeCallback = (res) => {

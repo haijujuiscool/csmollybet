@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { io } from 'socket.io-client';
 import { useAuth } from '../contexts/AuthContext';
 import LiveGamesFeed from './LiveGamesFeed';
+import { Users } from 'lucide-react';
 
 let socket;
 
@@ -15,6 +16,7 @@ export default function Chat({ isCollapsed, onToggleCollapse }) {
     const [isDesktop, setIsDesktop] = useState(window.innerWidth >= 1281);
     const messagesEndRef = useRef(null);
     const lastMessageTime = useRef(0);
+    const [onlineCount, setOnlineCount] = useState(0);
 
     useEffect(() => {
         const handleResize = () => {
@@ -37,6 +39,10 @@ export default function Chat({ isCollapsed, onToggleCollapse }) {
 
         socket.on('chat_message', (msg) => {
             setMessages(prev => [...prev, msg].slice(-30));
+        });
+
+        socket.on('online_count', (count) => {
+            setOnlineCount(count);
         });
 
         return () => {
@@ -201,11 +207,15 @@ export default function Chat({ isCollapsed, onToggleCollapse }) {
                                         disabled={!hasChatAccess}
                                     />
                                     <button className="btn-primary" onClick={sendMessage} style={{ padding: '10px' }} disabled={!hasChatAccess}>&gt;</button>
-                                </div>
+                                 </div>
                             </>
                         ) : (
                             <div style={{ textAlign: 'center', color: '#555', fontSize: '14px' }}>Login to chat</div>
                         )}
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '8px 0 0', fontSize: '13px', color: '#888' }}>
+                            <Users size={14} />
+                            <span>{onlineCount} users online</span>
+                        </div>
                     </div>
                 )}
             </div>

@@ -671,9 +671,8 @@ export default function WorldCup() {
 
             {/* Mobile Bet Slip Info & Background Style */}
             <style>{`
-                /* Static Background on PC, hidden on mobile */
-                @media (min-width: 769px) {
-                    .worldcup-container-bg {
+                /* Static Background on PC + iPad, hidden only on narrow phones */
+                .worldcup-container-bg {
                         background-image: url('/transfers/A8D32192-6C18-41FD-A61C-FA916BDDD279.png');
                         background-attachment: fixed;
                         background-position: center;
@@ -684,9 +683,8 @@ export default function WorldCup() {
                         left: 0;
                         width: 100%;
                         height: 100%;
-                        z-index: -1;
+                        z-index: 0;
                     }
-                }
                 
                 @media (max-width: 768px) {
                     .worldcup-container > div:nth-child(2) {

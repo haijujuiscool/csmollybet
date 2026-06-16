@@ -591,10 +591,6 @@ button:hover {
     display: none !important;
   }
 
-  .expand-handle {
-    display: none !important;
-  }
-
 }
 
 /* Chat & Feed panel overflow handling */
@@ -710,10 +706,6 @@ button:hover {
     width: 100% !important;
   }
 
-  .expand-handle {
-    display: none !important;
-  }
-  
   .chat-toggle-btn {
     display: none !important;
   }

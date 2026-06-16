@@ -12,6 +12,7 @@ const path = require('path');
 const sharp = require('sharp');
 const battleEngine = require('./battleEngine');
 const chatEngine = require('./chatEngine');
+const fakeFeed = require('./fakeFeedGenerator');
 const lotteryEngine = require('./lotteryEngine');
 const { getItemPrice } = require('./tradebotService');
 const steamBot = require('./steamBot');
@@ -83,7 +84,7 @@ global.broadcastGameResult = (username, gameName, betAmount, payoutAmount, multi
             timestamp: Date.now()
         };
         global.gameFeedHistory.push(update);
-        if (global.gameFeedHistory.length > 50) {
+        if (global.gameFeedHistory.length > 100) {
             global.gameFeedHistory.shift();
         }
         io.emit('game_feed_update', update);
@@ -113,6 +114,12 @@ if (!fs.existsSync(transfersDir)) {
     fs.mkdirSync(transfersDir, { recursive: true });
 }
 app.use('/transfers', express.static(transfersDir));
+
+const avatarsDir = path.join(__dirname, 'public', 'avatars');
+if (!fs.existsSync(avatarsDir)) {
+    fs.mkdirSync(avatarsDir, { recursive: true });
+}
+app.use('/avatars', express.static(avatarsDir));
 
 const { JWT_SECRET } = require('./security');
 
@@ -3601,13 +3608,14 @@ function resolveWorldCupBets(match) {
 // Helper: check for auto-resolved / completed matches and settle bets
 function checkAndResolveFinishedMatches() {
     try {
-        const { newlyCompleted } = worldCupService.updateMatchStatuses();
-        if (newlyCompleted && newlyCompleted.length > 0) {
-            worldCupService.saveMatches();
-            console.log(`[WorldCup] Auto-resolving bets for ${newlyCompleted.length} matches completed in the background`);
-            newlyCompleted.forEach(match => {
-                resolveWorldCupBets(match);
-            });
+        const { changed } = worldCupService.updateMatchStatuses();
+        if (changed > 0) worldCupService.saveMatches();
+
+        // Resolve all pending bets for any match already marked as completed
+        const matches = worldCupService.getMatches();
+        const completedMatches = matches.filter(m => m.status === 'completed' && m.winner);
+        for (const match of completedMatches) {
+            resolveWorldCupBets(match);
         }
     } catch (e) {
         console.error('[WorldCup] Auto-resolution check error:', e.message);
@@ -3727,4 +3735,5 @@ app.post('/api/admin/worldcup/simulate', authenticateToken, (req, res) => {
 const PORT = 3001;
 server.listen(PORT, () => {
     console.log(`Backend server running on http://localhost:${PORT}`);
+    setTimeout(() => fakeFeed.start(io, global.gameFeedHistory), 1000);
 });
